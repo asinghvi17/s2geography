@@ -5,6 +5,7 @@
 
 #include "s2geography/build.h"
 #include "s2geography/geography_interface.h"
+#include "s2geography/operation_internal.h"
 #include "s2geography/sedona_udf/sedona_udf_internal.h"
 
 namespace s2geography {
@@ -274,9 +275,10 @@ bool s2_find_validation_error(const Geography& geog, S2Error* error) {
 
 namespace sedona_udf {
 
+template <typename Output>
 struct S2LengthExec {
   using arg0_t = GeoArrowGeographyInputView;
-  using out_t = DoubleOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, out_t* out) {
     double length = 0.0;
@@ -289,9 +291,10 @@ struct S2LengthExec {
   }
 };
 
+template <typename Output>
 struct S2AreaExec {
   using arg0_t = GeoArrowGeographyInputView;
-  using out_t = DoubleOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, out_t* out) {
     double area = 0.0;
@@ -306,9 +309,10 @@ struct S2AreaExec {
   std::vector<S2Point> scratch_;
 };
 
+template <typename Output>
 struct S2PerimeterExec {
   using arg0_t = GeoArrowGeographyInputView;
-  using out_t = DoubleOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, out_t* out) {
     double perimeter = 0.0;
@@ -322,17 +326,32 @@ struct S2PerimeterExec {
 };
 
 void LengthKernel(struct SedonaCScalarKernel* out) {
-  InitUnaryKernel<S2LengthExec>(out, "st_length");
+  InitUnaryKernel<S2LengthExec<DoubleOutputBuilder>>(out, "st_length");
 }
 
 void AreaKernel(struct SedonaCScalarKernel* out) {
-  InitUnaryKernel<S2AreaExec>(out, "st_area");
+  InitUnaryKernel<S2AreaExec<DoubleOutputBuilder>>(out, "st_area");
 }
 
 void PerimeterKernel(struct SedonaCScalarKernel* out) {
-  InitUnaryKernel<S2PerimeterExec>(out, "st_perimeter");
+  InitUnaryKernel<S2PerimeterExec<DoubleOutputBuilder>>(out, "st_perimeter");
 }
 
 }  // namespace sedona_udf
+
+std::unique_ptr<Operation> Area() {
+  return std::make_unique<internal::UnaryDoubleOperation<
+      sedona_udf::S2AreaExec<internal::StashedDoubleOutput>>>("area");
+}
+
+std::unique_ptr<Operation> Perimeter() {
+  return std::make_unique<internal::UnaryDoubleOperation<
+      sedona_udf::S2PerimeterExec<internal::StashedDoubleOutput>>>("perimeter");
+}
+
+std::unique_ptr<Operation> Length() {
+  return std::make_unique<internal::UnaryDoubleOperation<
+      sedona_udf::S2LengthExec<internal::StashedDoubleOutput>>>("length");
+}
 
 }  // namespace s2geography

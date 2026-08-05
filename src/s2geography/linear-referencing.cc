@@ -8,6 +8,7 @@
 #include "s2geography/accessors.h"
 #include "s2geography/build.h"
 #include "s2geography/geography.h"
+#include "s2geography/operation_internal.h"
 #include "s2geography/sedona_udf/sedona_udf_internal.h"
 
 namespace s2geography {
@@ -82,10 +83,11 @@ namespace sedona_udf {
 
 static constexpr int kMaxEdgesLinearSearch = 32;
 
+template <typename Output>
 struct S2LineInterpolatePointExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = DoubleInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value0, arg1_t::c_type fraction, out_t* out) {
     if (value0.is_empty()) {
@@ -175,10 +177,11 @@ struct S2LineInterpolatePointExec {
   std::vector<S1Angle> cumulative_lengths_;
 };
 
+template <typename Output>
 struct S2LineLocatePointExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = DoubleOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value0, arg1_t::c_type value1, out_t* out) {
     if (value0.is_empty() || value1.is_empty()) {
@@ -242,13 +245,27 @@ struct S2LineLocatePointExec {
 };
 
 void LineInterpolatePointKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<S2LineInterpolatePointExec>(out, "st_lineinterpolatepoint");
+  InitBinaryKernel<S2LineInterpolatePointExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_lineinterpolatepoint");
 }
 
 void LineLocatePointKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<S2LineLocatePointExec>(out, "st_linelocatepoint");
+  InitBinaryKernel<S2LineLocatePointExec<DoubleOutputBuilder>>(
+      out, "st_linelocatepoint");
 }
 
 }  // namespace sedona_udf
+
+std::unique_ptr<Operation> LineInterpolatePoint() {
+  return std::make_unique<
+      internal::GeographyDoubleOperation<sedona_udf::S2LineInterpolatePointExec<
+          sedona_udf::GeoArrowScalarOutputBuilder>>>("line_interpolate_point");
+}
+
+std::unique_ptr<Operation> LineLocatePoint() {
+  return std::make_unique<internal::BinaryDoubleOperation<
+      sedona_udf::S2LineLocatePointExec<internal::StashedDoubleOutput>>>(
+      "line_locate_point");
+}
 
 }  // namespace s2geography

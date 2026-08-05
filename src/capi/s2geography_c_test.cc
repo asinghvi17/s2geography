@@ -480,3 +480,725 @@ TEST(S2GeographyC, DistanceWithinOperation) {
   S2GeogDestroy(lhs);
   S2GeogFactoryDestroy(factory);
 }
+
+// ============================================================================
+// Unary Double Operations Tests (Parameterized)
+// ============================================================================
+
+struct UnaryDoubleParam {
+  const char* name;
+  int op_id;
+  const char* wkt;
+  double expected;
+};
+
+class UnaryDoubleTest : public ::testing::TestWithParam<UnaryDoubleParam> {};
+
+TEST_P(UnaryDoubleTest, EvalGeog) {
+  const auto& p = GetParam();
+
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* geog = nullptr;
+  ASSERT_EQ(S2GeogCreate(&geog), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, p.wkt, strlen(p.wkt), geog, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, p.op_id), S2GEOGRAPHY_OK);
+
+  ASSERT_STREQ(S2GeogOpName(op), p.name);
+  ASSERT_EQ(S2GeogOpOutputType(op), S2GEOGRAPHY_OUTPUT_TYPE_DOUBLE);
+
+  ASSERT_EQ(S2GeogOpEvalGeog(op, geog, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 1);
+  EXPECT_NEAR(S2GeogOpGetDouble(op), p.expected, p.expected * 1e-3);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(geog);
+  S2GeogFactoryDestroy(factory);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    S2GeographyC, UnaryDoubleTest,
+    ::testing::Values(UnaryDoubleParam{"area", S2GEOGRAPHY_OP_AREA,
+                                       "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))",
+                                       1.23652e10},
+                      UnaryDoubleParam{"perimeter", S2GEOGRAPHY_OP_PERIMETER,
+                                       "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))",
+                                       444763.0},
+                      UnaryDoubleParam{"length", S2GEOGRAPHY_OP_LENGTH,
+                                       "LINESTRING (0 0, 1 0)", 111195.0}),
+    [](const ::testing::TestParamInfo<UnaryDoubleParam>& info) {
+      return info.param.name;
+    });
+
+// ============================================================================
+// Binary Double Operations Tests (Parameterized)
+// ============================================================================
+
+struct BinaryDoubleParam {
+  const char* name;
+  int op_id;
+  const char* lhs_wkt;
+  const char* rhs_wkt;
+  double expected;
+};
+
+class BinaryDoubleTest : public ::testing::TestWithParam<BinaryDoubleParam> {};
+
+TEST_P(BinaryDoubleTest, EvalGeogGeog) {
+  const auto& p = GetParam();
+
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* lhs = nullptr;
+  struct S2Geog* rhs = nullptr;
+  ASSERT_EQ(S2GeogCreate(&lhs), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&rhs), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  ASSERT_EQ(
+      S2GeogFactoryInitFromWkt(factory, p.lhs_wkt, strlen(p.lhs_wkt), lhs, err),
+      S2GEOGRAPHY_OK);
+  ASSERT_EQ(
+      S2GeogFactoryInitFromWkt(factory, p.rhs_wkt, strlen(p.rhs_wkt), rhs, err),
+      S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, p.op_id), S2GEOGRAPHY_OK);
+
+  ASSERT_STREQ(S2GeogOpName(op), p.name);
+  ASSERT_EQ(S2GeogOpOutputType(op), S2GEOGRAPHY_OUTPUT_TYPE_DOUBLE);
+
+  ASSERT_EQ(S2GeogOpEvalGeogGeog(op, lhs, rhs, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 1);
+  EXPECT_NEAR(S2GeogOpGetDouble(op), p.expected, p.expected * 1e-3);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(rhs);
+  S2GeogDestroy(lhs);
+  S2GeogFactoryDestroy(factory);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    S2GeographyC, BinaryDoubleTest,
+    ::testing::Values(
+        BinaryDoubleParam{"distance", S2GEOGRAPHY_OP_DISTANCE, "POINT (0 0)",
+                          "POINT (0 1)", 111195.0},
+        BinaryDoubleParam{"max_distance", S2GEOGRAPHY_OP_MAX_DISTANCE,
+                          "POINT (0 0)", "LINESTRING (0 1, 0 2)", 222390.0},
+        BinaryDoubleParam{"line_locate_point", S2GEOGRAPHY_OP_LINE_LOCATE_POINT,
+                          "LINESTRING (0 0, 0 1)", "POINT (0 0.5)", 0.5}),
+    [](const ::testing::TestParamInfo<BinaryDoubleParam>& info) {
+      return info.param.name;
+    });
+
+// ============================================================================
+// Null Output Channel Tests
+// ============================================================================
+
+TEST(S2GeographyC, OpHasResultDouble) {
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* point = nullptr;
+  struct S2Geog* empty = nullptr;
+  ASSERT_EQ(S2GeogCreate(&point), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&empty), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  const char* point_wkt = "POINT (0 0)";
+  const char* empty_wkt = "LINESTRING EMPTY";
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, point_wkt, strlen(point_wkt),
+                                     point, err),
+            S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, empty_wkt, strlen(empty_wkt),
+                                     empty, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, S2GEOGRAPHY_OP_DISTANCE), S2GEOGRAPHY_OK);
+
+  // The distance to an empty geography is null rather than an error or NaN
+  ASSERT_EQ(S2GeogOpEvalGeogGeog(op, point, empty, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 0);
+
+  // ...and the null state must not persist into the next evaluation
+  ASSERT_EQ(S2GeogOpEvalGeogGeog(op, point, point, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 1);
+  EXPECT_DOUBLE_EQ(S2GeogOpGetDouble(op), 0.0);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(empty);
+  S2GeogDestroy(point);
+  S2GeogFactoryDestroy(factory);
+}
+
+// ============================================================================
+// Integer Output Operations Tests
+// ============================================================================
+
+TEST(S2GeographyC, OpCellIdFromPoint) {
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* point = nullptr;
+  struct S2Geog* empty = nullptr;
+  ASSERT_EQ(S2GeogCreate(&point), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&empty), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  const char* point_wkt = "POINT (-73.9857 40.7484)";
+  const char* empty_wkt = "LINESTRING EMPTY";
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, point_wkt, strlen(point_wkt),
+                                     point, err),
+            S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, empty_wkt, strlen(empty_wkt),
+                                     empty, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, S2GEOGRAPHY_OP_CELL_ID_FROM_POINT),
+            S2GEOGRAPHY_OK);
+
+  ASSERT_STREQ(S2GeogOpName(op), "cell_id_from_point");
+  ASSERT_EQ(S2GeogOpOutputType(op), S2GEOGRAPHY_OUTPUT_TYPE_INT);
+
+  // Should agree with the standalone cell ID function
+  struct S2GeogVertex vertex;
+  vertex.v[0] = -73.9857;
+  vertex.v[1] = 40.7484;
+  vertex.v[2] = 0;
+  vertex.v[3] = 0;
+
+  ASSERT_EQ(S2GeogOpEvalGeog(op, point, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 1);
+  EXPECT_EQ(static_cast<uint64_t>(S2GeogOpGetInt(op)),
+            S2GeogLngLatToCellId(&vertex));
+
+  // An empty geography has no cell ID
+  ASSERT_EQ(S2GeogOpEvalGeog(op, empty, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 0);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(empty);
+  S2GeogDestroy(point);
+  S2GeogFactoryDestroy(factory);
+}
+
+TEST(S2GeographyC, OpCoveringCellIds) {
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* geog = nullptr;
+  ASSERT_EQ(S2GeogCreate(&geog), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  const char* wkt = "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))";
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, wkt, strlen(wkt), geog, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, S2GEOGRAPHY_OP_COVERING_CELL_IDS),
+            S2GEOGRAPHY_OK);
+
+  ASSERT_STREQ(S2GeogOpName(op), "covering_cell_ids");
+  ASSERT_EQ(S2GeogOpOutputType(op), S2GEOGRAPHY_OUTPUT_TYPE_INT);
+
+  // The default covering uses at most 8 cells
+  ASSERT_EQ(S2GeogOpEvalGeog(op, geog, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 1);
+
+  size_t count = S2GeogOpGetIntCount(op);
+  ASSERT_GT(count, 0);
+  EXPECT_LE(count, 8);
+
+  std::vector<int64_t> cell_ids(count);
+  EXPECT_EQ(S2GeogOpGetInts(op, cell_ids.data(), cell_ids.size()), count);
+  for (int64_t cell_id : cell_ids) {
+    EXPECT_TRUE(S2CellId(static_cast<uint64_t>(cell_id)).is_valid());
+  }
+
+  // A smaller output copies only the values that fit
+  EXPECT_EQ(S2GeogOpGetInts(op, cell_ids.data(), 1), 1);
+
+  // An explicit level range and cell budget is respected
+  ASSERT_EQ(S2GeogOpEvalGeogIntIntInt(op, geog, 0, 30, 4, err), S2GEOGRAPHY_OK);
+  EXPECT_GT(S2GeogOpGetIntCount(op), 0);
+  EXPECT_LE(S2GeogOpGetIntCount(op), 4);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(geog);
+  S2GeogFactoryDestroy(factory);
+}
+
+// ============================================================================
+// Unary Geography Operations Tests (Parameterized)
+// ============================================================================
+
+struct UnaryGeographyParam {
+  const char* name;
+  int op_id;
+  const char* wkt;
+};
+
+class UnaryGeographyTest
+    : public ::testing::TestWithParam<UnaryGeographyParam> {};
+
+TEST_P(UnaryGeographyTest, EvalGeog) {
+  const auto& p = GetParam();
+
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* geog = nullptr;
+  struct S2Geog* result = nullptr;
+  ASSERT_EQ(S2GeogCreate(&geog), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&result), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, p.wkt, strlen(p.wkt), geog, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, p.op_id), S2GEOGRAPHY_OK);
+
+  ASSERT_STREQ(S2GeogOpName(op), p.name);
+  ASSERT_EQ(S2GeogOpOutputType(op), S2GEOGRAPHY_OUTPUT_TYPE_GEOGRAPHY);
+
+  ASSERT_EQ(S2GeogOpEvalGeog(op, geog, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 1);
+
+  // The same output geography can be reused for multiple calls
+  ASSERT_EQ(S2GeogOpGetGeog(op, result, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpGetGeog(op, result, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogForcePrepare(result, err), S2GEOGRAPHY_OK);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(result);
+  S2GeogDestroy(geog);
+  S2GeogFactoryDestroy(factory);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    S2GeographyC, UnaryGeographyTest,
+    ::testing::Values(
+        UnaryGeographyParam{"centroid", S2GEOGRAPHY_OP_CENTROID,
+                            "MULTIPOINT (0 0, 0 2)"},
+        UnaryGeographyParam{"convex_hull", S2GEOGRAPHY_OP_CONVEX_HULL,
+                            "MULTIPOINT (0 0, 1 0, 1 1, 0 1)"},
+        UnaryGeographyParam{"point_on_surface", S2GEOGRAPHY_OP_POINT_ON_SURFACE,
+                            "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))"}),
+    [](const ::testing::TestParamInfo<UnaryGeographyParam>& info) {
+      return info.param.name;
+    });
+
+// ============================================================================
+// Binary Geography Operations Tests (Parameterized)
+// ============================================================================
+
+struct BinaryGeographyParam {
+  const char* name;
+  int op_id;
+  const char* lhs_wkt;
+  const char* rhs_wkt;
+};
+
+class BinaryGeographyTest
+    : public ::testing::TestWithParam<BinaryGeographyParam> {};
+
+TEST_P(BinaryGeographyTest, EvalGeogGeog) {
+  const auto& p = GetParam();
+
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* lhs = nullptr;
+  struct S2Geog* rhs = nullptr;
+  struct S2Geog* result = nullptr;
+  ASSERT_EQ(S2GeogCreate(&lhs), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&rhs), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&result), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  ASSERT_EQ(
+      S2GeogFactoryInitFromWkt(factory, p.lhs_wkt, strlen(p.lhs_wkt), lhs, err),
+      S2GEOGRAPHY_OK);
+  ASSERT_EQ(
+      S2GeogFactoryInitFromWkt(factory, p.rhs_wkt, strlen(p.rhs_wkt), rhs, err),
+      S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, p.op_id), S2GEOGRAPHY_OK);
+
+  ASSERT_STREQ(S2GeogOpName(op), p.name);
+  ASSERT_EQ(S2GeogOpOutputType(op), S2GEOGRAPHY_OUTPUT_TYPE_GEOGRAPHY);
+
+  ASSERT_EQ(S2GeogOpEvalGeogGeog(op, lhs, rhs, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 1);
+
+  ASSERT_EQ(S2GeogOpGetGeog(op, result, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogForcePrepare(result, err), S2GEOGRAPHY_OK);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(result);
+  S2GeogDestroy(rhs);
+  S2GeogDestroy(lhs);
+  S2GeogFactoryDestroy(factory);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    S2GeographyC, BinaryGeographyTest,
+    ::testing::Values(
+        BinaryGeographyParam{"intersection", S2GEOGRAPHY_OP_INTERSECTION,
+                             "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))",
+                             "POLYGON ((0.5 0, 1.5 0, 1.5 1, 0.5 1, 0.5 0))"},
+        BinaryGeographyParam{"union", S2GEOGRAPHY_OP_UNION,
+                             "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))",
+                             "POLYGON ((0.5 0, 1.5 0, 1.5 1, 0.5 1, 0.5 0))"},
+        BinaryGeographyParam{"difference", S2GEOGRAPHY_OP_DIFFERENCE,
+                             "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))",
+                             "POLYGON ((0.5 0, 1.5 0, 1.5 1, 0.5 1, 0.5 0))"},
+        BinaryGeographyParam{"sym_difference", S2GEOGRAPHY_OP_SYM_DIFFERENCE,
+                             "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))",
+                             "POLYGON ((0.5 0, 1.5 0, 1.5 1, 0.5 1, 0.5 0))"},
+        BinaryGeographyParam{"closest_point", S2GEOGRAPHY_OP_CLOSEST_POINT,
+                             "LINESTRING (0 0, 0 1)", "POINT (1 0.5)"},
+        BinaryGeographyParam{"shortest_line", S2GEOGRAPHY_OP_SHORTEST_LINE,
+                             "LINESTRING (0 0, 0 1)", "POINT (1 0.5)"},
+        BinaryGeographyParam{"longest_line", S2GEOGRAPHY_OP_LONGEST_LINE,
+                             "LINESTRING (0 0, 0 1)", "POINT (1 0.5)"}),
+    [](const ::testing::TestParamInfo<BinaryGeographyParam>& info) {
+      return info.param.name;
+    });
+
+// ============================================================================
+// Geography + Double Operations Tests (Parameterized)
+// ============================================================================
+
+struct GeogDoubleGeographyParam {
+  const char* name;
+  int op_id;
+  const char* wkt;
+  double arg1;
+};
+
+class GeogDoubleGeographyTest
+    : public ::testing::TestWithParam<GeogDoubleGeographyParam> {};
+
+TEST_P(GeogDoubleGeographyTest, EvalGeogDouble) {
+  const auto& p = GetParam();
+
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* geog = nullptr;
+  struct S2Geog* result = nullptr;
+  ASSERT_EQ(S2GeogCreate(&geog), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&result), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, p.wkt, strlen(p.wkt), geog, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, p.op_id), S2GEOGRAPHY_OK);
+
+  ASSERT_STREQ(S2GeogOpName(op), p.name);
+  ASSERT_EQ(S2GeogOpOutputType(op), S2GEOGRAPHY_OUTPUT_TYPE_GEOGRAPHY);
+
+  ASSERT_EQ(S2GeogOpEvalGeogDouble(op, geog, p.arg1, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogOpHasResult(op), 1);
+
+  ASSERT_EQ(S2GeogOpGetGeog(op, result, err), S2GEOGRAPHY_OK);
+  EXPECT_EQ(S2GeogForcePrepare(result, err), S2GEOGRAPHY_OK);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(result);
+  S2GeogDestroy(geog);
+  S2GeogFactoryDestroy(factory);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    S2GeographyC, GeogDoubleGeographyTest,
+    ::testing::Values(
+        GeogDoubleGeographyParam{"simplify", S2GEOGRAPHY_OP_SIMPLIFY,
+                                 "LINESTRING (0 0, 0 0.5, 0 1)", 1000.0},
+        GeogDoubleGeographyParam{"buffer", S2GEOGRAPHY_OP_BUFFER, "POINT (0 0)",
+                                 1000.0},
+        GeogDoubleGeographyParam{"reduce_precision",
+                                 S2GEOGRAPHY_OP_REDUCE_PRECISION,
+                                 "LINESTRING (0 0, 0 1)", 0.01},
+        GeogDoubleGeographyParam{"segmentize", S2GEOGRAPHY_OP_SEGMENTIZE,
+                                 "LINESTRING (0 0, 0 1)", 20000.0},
+        GeogDoubleGeographyParam{"tessellate_geog",
+                                 S2GEOGRAPHY_OP_TESSELLATE_GEOG,
+                                 "LINESTRING (0 0, 10 10)", 1000.0},
+        GeogDoubleGeographyParam{"tessellate_geom",
+                                 S2GEOGRAPHY_OP_TESSELLATE_GEOM,
+                                 "LINESTRING (0 0, 10 10)", 1000.0},
+        GeogDoubleGeographyParam{"line_interpolate_point",
+                                 S2GEOGRAPHY_OP_LINE_INTERPOLATE_POINT,
+                                 "LINESTRING (0 0, 0 1)", 0.5}),
+    [](const ::testing::TestParamInfo<GeogDoubleGeographyParam>& info) {
+      return info.param.name;
+    });
+
+// ============================================================================
+// Geography Output Tests
+// ============================================================================
+
+TEST(S2GeographyC, OpGetGeogRoundTrip) {
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* input = nullptr;
+  struct S2Geog* other = nullptr;
+  struct S2Geog* expected = nullptr;
+  struct S2Geog* result = nullptr;
+  ASSERT_EQ(S2GeogCreate(&input), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&other), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&expected), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&result), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  const char* input_wkt = "MULTIPOINT (0 0, 0 2)";
+  const char* other_wkt = "MULTIPOINT (10 0, 10 2)";
+  const char* expected_wkt = "POINT (0 1)";
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, input_wkt, strlen(input_wkt),
+                                     input, err),
+            S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, other_wkt, strlen(other_wkt),
+                                     other, err),
+            S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, expected_wkt,
+                                     strlen(expected_wkt), expected, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* centroid = nullptr;
+  struct S2GeogOp* distance = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&centroid, S2GEOGRAPHY_OP_CENTROID), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpCreate(&distance, S2GEOGRAPHY_OP_DISTANCE), S2GEOGRAPHY_OK);
+
+  // The centroid of two points is the midpoint between them
+  ASSERT_EQ(S2GeogOpEvalGeog(centroid, input, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpGetGeog(centroid, result, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpEvalGeogGeog(distance, result, expected, err),
+            S2GEOGRAPHY_OK);
+  EXPECT_NEAR(S2GeogOpGetDouble(distance), 0.0, 1e-6);
+
+  // The output is a copy and survives the next evaluation of the operation
+  ASSERT_EQ(S2GeogOpEvalGeog(centroid, other, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpEvalGeogGeog(distance, result, expected, err),
+            S2GEOGRAPHY_OK);
+  EXPECT_NEAR(S2GeogOpGetDouble(distance), 0.0, 1e-6);
+
+  S2GeogOpDestroy(distance);
+  S2GeogOpDestroy(centroid);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(result);
+  S2GeogDestroy(expected);
+  S2GeogDestroy(other);
+  S2GeogDestroy(input);
+  S2GeogFactoryDestroy(factory);
+}
+
+TEST(S2GeographyC, OpGetGeogIntersectionArea) {
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* lhs = nullptr;
+  struct S2Geog* rhs = nullptr;
+  struct S2Geog* result = nullptr;
+  ASSERT_EQ(S2GeogCreate(&lhs), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&rhs), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&result), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  const char* lhs_wkt = "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))";
+  const char* rhs_wkt = "POLYGON ((0.5 0, 1.5 0, 1.5 1, 0.5 1, 0.5 0))";
+  ASSERT_EQ(
+      S2GeogFactoryInitFromWkt(factory, lhs_wkt, strlen(lhs_wkt), lhs, err),
+      S2GEOGRAPHY_OK);
+  ASSERT_EQ(
+      S2GeogFactoryInitFromWkt(factory, rhs_wkt, strlen(rhs_wkt), rhs, err),
+      S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* intersection = nullptr;
+  struct S2GeogOp* area = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&intersection, S2GEOGRAPHY_OP_INTERSECTION),
+            S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpCreate(&area, S2GEOGRAPHY_OP_AREA), S2GEOGRAPHY_OK);
+
+  // The overlap is half of the one degree square
+  ASSERT_EQ(S2GeogOpEvalGeogGeog(intersection, lhs, rhs, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpGetGeog(intersection, result, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpEvalGeog(area, result, err), S2GEOGRAPHY_OK);
+  EXPECT_NEAR(S2GeogOpGetDouble(area), 6.1826e9, 6.1826e7);
+
+  S2GeogOpDestroy(area);
+  S2GeogOpDestroy(intersection);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(result);
+  S2GeogDestroy(rhs);
+  S2GeogDestroy(lhs);
+  S2GeogFactoryDestroy(factory);
+}
+
+TEST(S2GeographyC, OpGetGeogWrongOutputType) {
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* geog = nullptr;
+  struct S2Geog* result = nullptr;
+  ASSERT_EQ(S2GeogCreate(&geog), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&result), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  const char* wkt = "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))";
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, wkt, strlen(wkt), geog, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, S2GEOGRAPHY_OP_AREA), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpEvalGeog(op, geog, err), S2GEOGRAPHY_OK);
+
+  EXPECT_EQ(S2GeogOpGetGeog(op, result, err), EINVAL);
+  EXPECT_GT(strlen(S2GeogErrorGetMessage(err)), 0);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(result);
+  S2GeogDestroy(geog);
+  S2GeogFactoryDestroy(factory);
+}
+
+// ============================================================================
+// Buffer Operation Tests
+// ============================================================================
+
+TEST(S2GeographyC, OpBufferArities) {
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* geog = nullptr;
+  struct S2Geog* result = nullptr;
+  ASSERT_EQ(S2GeogCreate(&geog), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogCreate(&result), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  const char* wkt = "POINT (0 0)";
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, wkt, strlen(wkt), geog, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* buffer = nullptr;
+  struct S2GeogOp* area = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&buffer, S2GEOGRAPHY_OP_BUFFER), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpCreate(&area, S2GEOGRAPHY_OP_AREA), S2GEOGRAPHY_OK);
+
+  // The default buffer approximates a 1km circle to within a few percent
+  const double circle_area = 3.14159265358979323846 * 1000.0 * 1000.0;
+  ASSERT_EQ(S2GeogOpEvalGeogDouble(buffer, geog, 1000.0, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpGetGeog(buffer, result, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpEvalGeog(area, result, err), S2GEOGRAPHY_OK);
+  double area_default = S2GeogOpGetDouble(area);
+  EXPECT_NEAR(area_default, circle_area, circle_area * 0.05);
+
+  // Two segments per quadrant is a coarser approximation
+  ASSERT_EQ(S2GeogOpEvalGeogDoubleInt(buffer, geog, 1000.0, 2, err),
+            S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpGetGeog(buffer, result, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpEvalGeog(area, result, err), S2GEOGRAPHY_OK);
+  double area_quad_segs = S2GeogOpGetDouble(area);
+  EXPECT_NE(area_quad_segs, area_default);
+
+  // ...and is exactly what the equivalent parameter string produces
+  const char* params = "quad_segs=2";
+  ASSERT_EQ(S2GeogOpEvalGeogDoubleString(buffer, geog, 1000.0, params,
+                                         strlen(params), err),
+            S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpGetGeog(buffer, result, err), S2GEOGRAPHY_OK);
+  ASSERT_EQ(S2GeogOpEvalGeog(area, result, err), S2GEOGRAPHY_OK);
+  EXPECT_DOUBLE_EQ(S2GeogOpGetDouble(area), area_quad_segs);
+
+  S2GeogOpDestroy(area);
+  S2GeogOpDestroy(buffer);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(result);
+  S2GeogDestroy(geog);
+  S2GeogFactoryDestroy(factory);
+}
+
+// ============================================================================
+// Operator Creation Tests
+// ============================================================================
+
+TEST(S2GeographyC, OpCreateUnsupported) {
+  struct S2GeogOp* op = nullptr;
+  EXPECT_EQ(S2GeogOpCreate(&op, 0), ENOTSUP);
+  EXPECT_EQ(S2GeogOpCreate(&op, S2GEOGRAPHY_OP_COVERING_CELL_IDS + 1), ENOTSUP);
+}
+
+TEST(S2GeographyC, OpEvalUnsupportedArity) {
+  struct S2GeogFactory* factory = nullptr;
+  ASSERT_EQ(S2GeogFactoryCreate(&factory), S2GEOGRAPHY_OK);
+
+  struct S2Geog* geog = nullptr;
+  ASSERT_EQ(S2GeogCreate(&geog), S2GEOGRAPHY_OK);
+
+  struct S2GeogError* err = nullptr;
+  ASSERT_EQ(S2GeogErrorCreate(&err), S2GEOGRAPHY_OK);
+
+  const char* wkt = "POINT (0 0)";
+  ASSERT_EQ(S2GeogFactoryInitFromWkt(factory, wkt, strlen(wkt), geog, err),
+            S2GEOGRAPHY_OK);
+
+  struct S2GeogOp* op = nullptr;
+  ASSERT_EQ(S2GeogOpCreate(&op, S2GEOGRAPHY_OP_AREA), S2GEOGRAPHY_OK);
+
+  // st_area takes exactly one geography
+  EXPECT_EQ(S2GeogOpEvalGeogDouble(op, geog, 0.0, err), EINVAL);
+  EXPECT_GT(strlen(S2GeogErrorGetMessage(err)), 0);
+
+  S2GeogOpDestroy(op);
+  S2GeogErrorDestroy(err);
+  S2GeogDestroy(geog);
+  S2GeogFactoryDestroy(factory);
+}

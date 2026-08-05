@@ -24,6 +24,12 @@ std::pair<S2Point, S2Point> s2_minimum_clearance_line_between(
 std::pair<S2Point, S2Point> s2_minimum_clearance_line_between(
     const S2ShapeIndex& geog1, const S2ShapeIndex& geog2);
 
+std::unique_ptr<Operation> Distance();
+std::unique_ptr<Operation> MaxDistance();
+std::unique_ptr<Operation> ClosestPoint();
+std::unique_ptr<Operation> ShortestLine();
+std::unique_ptr<Operation> LongestLine();
+
 namespace sedona_udf {
 
 void DistanceKernel(struct SedonaCScalarKernel* out,

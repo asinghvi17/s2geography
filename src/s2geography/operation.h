@@ -4,10 +4,14 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "s2geography/geoarrow-geography.h"
 #include "s2geography/geography_interface.h"
 #include "s2geography/macros.h"
+
+/// \brief Owning variant of the GeoArrowGeometryView (see geoarrow.h)
+struct GeoArrowGeometry;
 
 namespace s2geography {
 
@@ -28,7 +32,7 @@ namespace s2geography {
 class Operation {
  public:
   /// \brief Output type enumerator
-  enum class OutputType { kBool, kInt, kDouble, kWkb };
+  enum class OutputType { kBool, kInt, kDouble, kWkb, kGeography };
 
   Operation() = default;
   virtual ~Operation() = default;
@@ -40,6 +44,49 @@ class Operation {
   /// \brief The output type of this operation (e.g., for generic wrapping when
   /// an output object type must be chosen)
   virtual OutputType output_type() const = 0;
+
+  /// \brief Execute a function with one geography as input
+  virtual void ExecGeog(const GeoArrowGeography& arg0) {
+    S2GEOGRAPHY_UNUSED(arg0);
+    throw Exception("Can't call " + name() + " with geog");
+  }
+
+  /// \brief Execute a function with a geography and a double as input
+  virtual void ExecGeogDouble(const GeoArrowGeography& arg0, double arg1) {
+    S2GEOGRAPHY_UNUSED(arg0);
+    S2GEOGRAPHY_UNUSED(arg1);
+    throw Exception("Can't call " + name() + " with geog + double");
+  }
+
+  /// \brief Execute a function with a geography, a double, and an integer as
+  /// input
+  virtual void ExecGeogDoubleInt(const GeoArrowGeography& arg0, double arg1,
+                                 int64_t arg2) {
+    S2GEOGRAPHY_UNUSED(arg0);
+    S2GEOGRAPHY_UNUSED(arg1);
+    S2GEOGRAPHY_UNUSED(arg2);
+    throw Exception("Can't call " + name() + " with geog + double + int");
+  }
+
+  /// \brief Execute a function with a geography, a double, and a string as
+  /// input
+  virtual void ExecGeogDoubleString(const GeoArrowGeography& arg0, double arg1,
+                                    std::string_view arg2) {
+    S2GEOGRAPHY_UNUSED(arg0);
+    S2GEOGRAPHY_UNUSED(arg1);
+    S2GEOGRAPHY_UNUSED(arg2);
+    throw Exception("Can't call " + name() + " with geog + double + string");
+  }
+
+  /// \brief Execute a function with a geography and three integers as input
+  virtual void ExecGeogIntIntInt(const GeoArrowGeography& arg0, int64_t arg1,
+                                 int64_t arg2, int64_t arg3) {
+    S2GEOGRAPHY_UNUSED(arg0);
+    S2GEOGRAPHY_UNUSED(arg1);
+    S2GEOGRAPHY_UNUSED(arg2);
+    S2GEOGRAPHY_UNUSED(arg3);
+    throw Exception("Can't call " + name() + " with geog + int + int + int");
+  }
 
   /// \brief Execute a function with two geographies as input
   virtual void ExecGeogGeog(const GeoArrowGeography& arg0,
@@ -85,11 +132,29 @@ class Operation {
   /// output type is not defined.
   std::string_view GetStringView() const { return string_result_; }
 
+  /// \brief Return the integer list result for operations whose output type is
+  /// kInt but that generate a variable number of values
+  ///
+  /// The result before a call to an Exec or for a function with a different
+  /// output type is not defined.
+  const std::vector<int64_t>& GetInts() const { return ints_result_; }
+
+  /// \brief Return the geography result for operations whose output type is
+  /// kGeography
+  ///
+  /// The geography is owned by this operation and is invalidated by the next
+  /// call to an Exec. The result before a call to an Exec or for a function
+  /// with a different output type is not defined.
+  virtual const struct GeoArrowGeometry* GetGeography() const {
+    return nullptr;
+  }
+
  protected:
   bool has_result_{true};
   int64_t int_result_{};
   double double_result_{};
   std::string_view string_result_{};
+  std::vector<int64_t> ints_result_{};
 };
 
 }  // namespace s2geography

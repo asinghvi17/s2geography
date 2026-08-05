@@ -1,7 +1,10 @@
 
 #pragma once
 
+#include <memory>
+
 #include "s2geography/geography_interface.h"
+#include "s2geography/operation.h"
 #include "s2geography/sedona_udf/sedona_extension.h"
 
 namespace s2geography {
@@ -16,6 +19,10 @@ double s2_perimeter(const Geography& geog);
 double s2_x(const Geography& geog);
 double s2_y(const Geography& geog);
 bool s2_find_validation_error(const Geography& geog, S2Error* error);
+
+std::unique_ptr<Operation> Area();
+std::unique_ptr<Operation> Perimeter();
+std::unique_ptr<Operation> Length();
 
 namespace sedona_udf {
 

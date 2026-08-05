@@ -3,8 +3,11 @@
 
 #include <s2/s2convex_hull_query.h>
 
+#include <memory>
+
 #include "s2geography/aggregator.h"
 #include "s2geography/geography.h"
+#include "s2geography/operation.h"
 #include "s2geography/sedona_udf/sedona_extension.h"
 
 namespace s2geography {
@@ -33,6 +36,10 @@ class S2ConvexHullAggregator
   S2ConvexHullQuery query_;
   std::vector<std::unique_ptr<Geography>> keep_alive_;
 };
+
+std::unique_ptr<Operation> Centroid();
+std::unique_ptr<Operation> ConvexHull();
+std::unique_ptr<Operation> PointOnSurface();
 
 namespace sedona_udf {
 

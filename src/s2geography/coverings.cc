@@ -15,6 +15,7 @@
 #include "s2geography/accessors.h"
 #include "s2geography/geoarrow-geography.h"
 #include "s2geography/geography.h"
+#include "s2geography/operation_internal.h"
 #include "s2geography/sedona_udf/sedona_udf_internal.h"
 
 namespace s2geography {
@@ -255,9 +256,9 @@ void ValidateCoveringOptions(int64_t min_level, int64_t max_level,
   }
 }
 
+template <typename Out>
 void AppendCoveringCellIds(const GeoArrowGeography& value, int64_t min_level,
-                           int64_t max_level, int64_t max_cells,
-                           ListOutputBuilder<IntOutputBuilder>* out,
+                           int64_t max_level, int64_t max_cells, Out* out,
                            std::vector<S2CellId>* covering,
                            S2RegionCoverer* coverer) {
   ValidateCoveringOptions(min_level, max_level, max_cells);
@@ -299,9 +300,10 @@ void AppendCoveringCellIds(const GeoArrowGeography& value, int64_t min_level,
   out->Append();
 }
 
+template <typename Output>
 struct CellIdFromPointExec {
   using arg0_t = GeoArrowGeographyInputView;
-  using out_t = IntOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, out_t* out) {
     if (value.is_empty()) {
@@ -319,9 +321,10 @@ struct CellIdFromPointExec {
   }
 };
 
+template <typename Output>
 struct CoveringCellIdsExec {
   using arg0_t = GeoArrowGeographyInputView;
-  using out_t = ListOutputBuilder<IntOutputBuilder>;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, out_t* out) {
     AppendCoveringCellIds(value, kDefaultMinLevel, kDefaultMaxLevel,
@@ -332,10 +335,11 @@ struct CoveringCellIdsExec {
   S2RegionCoverer coverer_;
 };
 
+template <typename Output>
 struct CoveringCellIdsMinLevelExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = IntInputView;
-  using out_t = ListOutputBuilder<IntOutputBuilder>;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, arg1_t::c_type min_level, out_t* out) {
     AppendCoveringCellIds(value, min_level, kDefaultMaxLevel, kDefaultMaxCells,
@@ -346,11 +350,12 @@ struct CoveringCellIdsMinLevelExec {
   S2RegionCoverer coverer_;
 };
 
+template <typename Output>
 struct CoveringCellIdsLevelRangeExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = IntInputView;
   using arg2_t = IntInputView;
-  using out_t = ListOutputBuilder<IntOutputBuilder>;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, arg1_t::c_type min_level,
             arg2_t::c_type max_level, out_t* out) {
@@ -362,12 +367,13 @@ struct CoveringCellIdsLevelRangeExec {
   S2RegionCoverer coverer_;
 };
 
+template <typename Output>
 struct CoveringCellIdsLevelRangeMaxCellsExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = IntInputView;
   using arg2_t = IntInputView;
   using arg3_t = IntInputView;
-  using out_t = ListOutputBuilder<IntOutputBuilder>;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, arg1_t::c_type min_level,
             arg2_t::c_type max_level, arg3_t::c_type max_cells, out_t* out) {
@@ -409,24 +415,30 @@ struct BoundingBoxExec {
 };
 
 void CellIdFromPointKernel(struct SedonaCScalarKernel* out) {
-  InitUnaryKernel<CellIdFromPointExec>(out, "s2_cellidfrompoint");
+  InitUnaryKernel<CellIdFromPointExec<IntOutputBuilder>>(out,
+                                                         "s2_cellidfrompoint");
 }
 
 void CoveringCellIdsKernel(struct SedonaCScalarKernel* out) {
-  InitUnaryKernel<CoveringCellIdsExec>(out, "s2_coveringcellids");
+  InitUnaryKernel<CoveringCellIdsExec<ListOutputBuilder<IntOutputBuilder>>>(
+      out, "s2_coveringcellids");
 }
 
 void CoveringCellIdsMinLevelKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<CoveringCellIdsMinLevelExec>(out, "s2_coveringcellids");
+  InitBinaryKernel<
+      CoveringCellIdsMinLevelExec<ListOutputBuilder<IntOutputBuilder>>>(
+      out, "s2_coveringcellids");
 }
 
 void CoveringCellIdsLevelRangeKernel(struct SedonaCScalarKernel* out) {
-  InitTernaryKernel<CoveringCellIdsLevelRangeExec>(out, "s2_coveringcellids");
+  InitTernaryKernel<
+      CoveringCellIdsLevelRangeExec<ListOutputBuilder<IntOutputBuilder>>>(
+      out, "s2_coveringcellids");
 }
 
 void CoveringCellIdsLevelRangeMaxCellsKernel(struct SedonaCScalarKernel* out) {
-  InitQuaternaryKernel<CoveringCellIdsLevelRangeMaxCellsExec>(
-      out, "s2_coveringcellids");
+  InitQuaternaryKernel<CoveringCellIdsLevelRangeMaxCellsExec<
+      ListOutputBuilder<IntOutputBuilder>>>(out, "s2_coveringcellids");
 }
 
 void BoundingBoxKernel(struct SedonaCScalarKernel* out) {
@@ -434,5 +446,56 @@ void BoundingBoxKernel(struct SedonaCScalarKernel* out) {
 }
 
 }  // namespace sedona_udf
+
+/// \brief Operation implementation for s2_coveringcellids
+///
+/// Unlike the other operations, this one produces a list of cell ids and is
+/// exposed with two arities: the covering options default to the same values
+/// the unary kernel uses when they are not specified.
+class CoveringCellIdsOperation : public Operation {
+ public:
+  CoveringCellIdsOperation() : name_("covering_cell_ids") {}
+
+  const std::string& name() const override { return name_; }
+
+  OutputType output_type() const override {
+    return Operation::OutputType::kInt;
+  }
+
+  void ExecGeog(const GeoArrowGeography& arg0) override {
+    Rewind();
+    defaults_.Exec(arg0, &out_);
+  }
+
+  void ExecGeogIntIntInt(const GeoArrowGeography& arg0, int64_t min_level,
+                         int64_t max_level, int64_t max_cells) override {
+    Rewind();
+    level_range_max_cells_.Exec(arg0, min_level, max_level, max_cells, &out_);
+  }
+
+ private:
+  void Rewind() {
+    has_result_ = true;
+    ints_result_.clear();
+  }
+
+  std::string name_;
+  internal::StashedIntListOutput out_{
+      internal::StashedIntListOutput::Items{&ints_result_}, &has_result_};
+  sedona_udf::CoveringCellIdsExec<internal::StashedIntListOutput> defaults_;
+  sedona_udf::CoveringCellIdsLevelRangeMaxCellsExec<
+      internal::StashedIntListOutput>
+      level_range_max_cells_;
+};
+
+std::unique_ptr<Operation> CellIdFromPoint() {
+  return std::make_unique<internal::UnaryIntOperation<
+      sedona_udf::CellIdFromPointExec<internal::StashedIntOutput>>>(
+      "cell_id_from_point");
+}
+
+std::unique_ptr<Operation> CoveringCellIds() {
+  return std::make_unique<CoveringCellIdsOperation>();
+}
 
 }  // namespace s2geography

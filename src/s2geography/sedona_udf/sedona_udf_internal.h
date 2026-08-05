@@ -400,22 +400,16 @@ class StructOutputBuilder {
   }
 };
 
-/// \brief Low-level output builder for Geography as WKB
+/// \brief Sink-agnostic base for the low-level geometry output builders
 ///
-/// This builder handles output from functions that return geometry
-/// and exports the output as WKB. Unlike the WkbGeographyOutputBuilder,
-/// this builder exposes low-level building primitives for faster output
-/// (i.e., streaming output with minimal intermediary copying) and more
-/// feature-rich (e.g., ZM output and lossless point/multipoint semantics).
-template <enum GeoArrowEdgeType edge_type>
-class GeoArrowOutputBuilder {
+/// This builder implements the building primitives that write exclusively
+/// through a GeoArrowVisitor and are therefore independent of the sink that
+/// the visitor was initialized from. Wiring the visitor to a sink and
+/// exposing whatever that sink uses to communicate its output is the
+/// responsibility of the subclass.
+class GeoArrowVisitorOutputBuilder {
  public:
-  GeoArrowOutputBuilder() {
-    // Initialize the writer and wire it up to the visitor
-    GEOARROW_THROW_NOT_OK(nullptr, GeoArrowWKBWriterInit(&writer_));
-    GeoArrowWKBWriterInitVisitor(&writer_, &v_);
-    v_.error = &error_;
-
+  GeoArrowVisitorOutputBuilder() {
     // Wire up our coordinate buffer to a GeoArrowCoordView, which is what
     // the visitor requires for coord visiting.
     coords_.coords_stride = 1;
@@ -432,19 +426,9 @@ class GeoArrowOutputBuilder {
   }
 
   // Not copyable
-  GeoArrowOutputBuilder(const GeoArrowOutputBuilder&) = delete;
-  GeoArrowOutputBuilder& operator=(const GeoArrowOutputBuilder&) = delete;
-
-  // Ensure we manage the C object we're wrapping correctly
-  ~GeoArrowOutputBuilder() { GeoArrowWKBWriterReset(&writer_); }
-
-  void InitOutputType(struct ArrowSchema* out) {
-    ::geoarrow::Wkb().WithEdgeType(edge_type).InitSchema(out);
-  }
-
-  void InitOutputTypeWithCrs(struct ArrowSchema* out, const std::string& crs) {
-    ::geoarrow::Wkb().WithEdgeType(edge_type).WithCrs(crs).InitSchema(out);
-  }
+  GeoArrowVisitorOutputBuilder(const GeoArrowVisitorOutputBuilder&) = delete;
+  GeoArrowVisitorOutputBuilder& operator=(const GeoArrowVisitorOutputBuilder&) =
+      delete;
 
   void Reserve(int64_t additional_size) {
     S2GEOGRAPHY_UNUSED(additional_size);
@@ -493,7 +477,9 @@ class GeoArrowOutputBuilder {
 
   /// \brief Append a null value
   void AppendNull() {
-    GEOARROW_THROW_NOT_OK(nullptr, GeoArrowWKBWriterAppendNull(&writer_));
+    FeatureStart();
+    GEOARROW_THROW_NOT_OK(&error_, v_.null_feat(&v_));
+    FeatureEnd();
   }
 
   /// \brief Append an empty geometry of a specified type
@@ -525,12 +511,6 @@ class GeoArrowOutputBuilder {
     WriteCoord(pt, dim_src);
     GeomEnd();
     FeatureEnd();
-  }
-
-  /// \brief Append a preexisting geometry verbatim as a complete (non null)
-  /// feature
-  void AppendGeometry(struct GeoArrowGeometryView geom) {
-    GEOARROW_THROW_NOT_OK(nullptr, GeoArrowWKBWriterAppend(&writer_, geom));
   }
 
   /// \brief Start a feature (must be paired with FeatureEnd())
@@ -600,16 +580,7 @@ class GeoArrowOutputBuilder {
   /// \brief End a feature
   void FeatureEnd() { GEOARROW_THROW_NOT_OK(&error_, v_.feat_end(&v_)); }
 
-  /// \brief Finish the output
-  ///
-  /// The same output builder may be finished and appended to multiple times.
-  void Finish(struct ArrowArray* out) {
-    GEOARROW_THROW_NOT_OK(&error_,
-                          GeoArrowWKBWriterFinish(&writer_, out, &error_));
-  }
-
- private:
-  GeoArrowWKBWriter writer_{};
+ protected:
   GeoArrowVisitor v_{};
   GeoArrowError error_{};
   enum GeoArrowDimensions dim_ { GEOARROW_DIMENSIONS_XY };
@@ -643,10 +614,123 @@ class GeoArrowOutputBuilder {
   }
 };
 
+/// \brief Low-level output builder for Geography as WKB
+///
+/// This builder handles output from functions that return geometry
+/// and exports the output as WKB. Unlike the WkbGeographyOutputBuilder,
+/// this builder exposes low-level building primitives for faster output
+/// (i.e., streaming output with minimal intermediary copying) and more
+/// feature-rich (e.g., ZM output and lossless point/multipoint semantics).
+template <enum GeoArrowEdgeType edge_type>
+class GeoArrowOutputBuilder : public GeoArrowVisitorOutputBuilder {
+ public:
+  GeoArrowOutputBuilder() {
+    // Initialize the writer and wire it up to the visitor
+    GEOARROW_THROW_NOT_OK(nullptr, GeoArrowWKBWriterInit(&writer_));
+    GeoArrowWKBWriterInitVisitor(&writer_, &v_);
+    v_.error = &error_;
+  }
+
+  // Ensure we manage the C object we're wrapping correctly
+  ~GeoArrowOutputBuilder() { GeoArrowWKBWriterReset(&writer_); }
+
+  void InitOutputType(struct ArrowSchema* out) {
+    ::geoarrow::Wkb().WithEdgeType(edge_type).InitSchema(out);
+  }
+
+  void InitOutputTypeWithCrs(struct ArrowSchema* out, const std::string& crs) {
+    ::geoarrow::Wkb().WithEdgeType(edge_type).WithCrs(crs).InitSchema(out);
+  }
+
+  /// \brief Append a preexisting geometry verbatim as a complete (non null)
+  /// feature
+  void AppendGeometry(struct GeoArrowGeometryView geom) {
+    GEOARROW_THROW_NOT_OK(nullptr, GeoArrowWKBWriterAppend(&writer_, geom));
+  }
+
+  /// \brief Finish the output
+  ///
+  /// The same output builder may be finished and appended to multiple times.
+  void Finish(struct ArrowArray* out) {
+    GEOARROW_THROW_NOT_OK(&error_,
+                          GeoArrowWKBWriterFinish(&writer_, out, &error_));
+  }
+
+ private:
+  GeoArrowWKBWriter writer_{};
+};
+
 using GeoArrowGeographyOutputBuilder =
     GeoArrowOutputBuilder<GEOARROW_EDGE_TYPE_SPHERICAL>;
 using GeoArrowGeometryOutputBuilder =
     GeoArrowOutputBuilder<GEOARROW_EDGE_TYPE_PLANAR>;
+
+/// \brief Low-level output builder for a single GeoArrowGeometry
+///
+/// This builder handles output from functions that return geometry for
+/// callers that need the result as a scalar geometry rather than as an
+/// element of an Arrow array. Unlike the GeoArrowOutputBuilder, exactly one
+/// value is built at a time: Rewind() must be called before each evaluation
+/// and the result is only valid until the next call to Rewind().
+class GeoArrowScalarOutputBuilder : public GeoArrowVisitorOutputBuilder {
+ public:
+  GeoArrowScalarOutputBuilder() {
+    // Initialize the geometry and wire it up to the visitor
+    GEOARROW_THROW_NOT_OK(nullptr, GeoArrowGeometryInit(&geom_));
+    GeoArrowGeometryInitVisitor(&geom_, &v_);
+    v_.error = &error_;
+  }
+
+  // Ensure we manage the C object we're wrapping correctly. The geometry may
+  // be uninitialized if a Rewind() threw between its Reset and Init.
+  ~GeoArrowScalarOutputBuilder() {
+    if (geom_.private_data != nullptr) {
+      GeoArrowGeometryReset(&geom_);
+    }
+  }
+
+  /// \brief Discard the previous value and prepare to build a new one
+  ///
+  /// The same output builder is reused for many evaluations of a single
+  /// function: this releases the memory held by the previously built
+  /// geometry and rewires the visitor to build into the reinitialized
+  /// output.
+  void Rewind() {
+    GeoArrowGeometryReset(&geom_);
+    GEOARROW_THROW_NOT_OK(nullptr, GeoArrowGeometryInit(&geom_));
+    GeoArrowGeometryInitVisitor(&geom_, &v_);
+    v_.error = &error_;
+    is_null_ = false;
+  }
+
+  /// \brief Append a null value
+  void AppendNull() {
+    GeoArrowVisitorOutputBuilder::AppendNull();
+    is_null_ = true;
+  }
+
+  /// \brief Append a preexisting geometry verbatim as a complete (non null)
+  /// feature
+  void AppendGeometry(struct GeoArrowGeometryView geom) {
+    GEOARROW_THROW_NOT_OK(&error_, GeoArrowGeometryViewVisit(geom, &v_));
+    is_null_ = false;
+  }
+
+  /// \brief Return true if the last value appended was a null
+  ///
+  /// The value before a call to Rewind() is not defined.
+  bool is_null() const { return is_null_; }
+
+  /// \brief Return the geometry built since the last call to Rewind()
+  ///
+  /// The geometry is owned by this builder and is only valid until the next
+  /// call to Rewind() or until this builder is destroyed.
+  const struct GeoArrowGeometry* geometry() const { return &geom_; }
+
+ private:
+  struct GeoArrowGeometry geom_ {};
+  bool is_null_{false};
+};
 
 /// \brief Generic view of Arrow input
 ///

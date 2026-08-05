@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "s2geography/geoarrow-geography_util.h"
+#include "s2geography/operation_internal.h"
 #include "s2geography/sedona_udf/sedona_udf_internal.h"
 
 namespace s2geography {
@@ -138,10 +139,11 @@ void TransformSegments(struct GeoArrowGeometryView geom, Out* out,
 }  // namespace
 
 /// \brief Exec implementation for st_tessellategeog for geography
+template <typename Output>
 struct TessellateGeogExec {
   using arg0_t = GeoArrowGeometryInputView;
   using arg1_t = DoubleInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type geom, arg1_t::c_type distance, out_t* out) {
     if (!std::isfinite(distance) || distance <= 0) {
@@ -170,8 +172,7 @@ struct TessellateGeogExec {
     out->FeatureEnd();
   }
 
-  void UnprojectPoint(const struct GeoArrowGeometryNode* node,
-                      GeoArrowGeographyOutputBuilder* out) {
+  void UnprojectPoint(const struct GeoArrowGeometryNode* node, out_t* out) {
     internal::VisitNativeVertices(
         node, 0, node->size, [&](internal::GeoArrowVertex v) {
           v.SetPoint(projection_.Unproject(R2Point(v.lng, v.lat)));
@@ -181,7 +182,7 @@ struct TessellateGeogExec {
   }
 
   void TessellateLinestring(const struct GeoArrowGeometryNode* node,
-                            GeoArrowGeographyOutputBuilder* out) {
+                            out_t* out) {
     if (node->size == 0) {
       return;
     }
@@ -215,10 +216,11 @@ struct TessellateGeogExec {
 };
 
 /// \brief Exec implementation for st_tessellategeom for geography
+template <typename Output>
 struct TessellateGeomExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = DoubleInputView;
-  using out_t = GeoArrowGeometryOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type geom, arg1_t::c_type distance, out_t* out) {
     if (!std::isfinite(distance) || distance <= 0) {
@@ -247,8 +249,7 @@ struct TessellateGeomExec {
     out->FeatureEnd();
   }
 
-  void UnprojectPoint(const struct GeoArrowGeometryNode* node,
-                      GeoArrowGeometryOutputBuilder* out) {
+  void UnprojectPoint(const struct GeoArrowGeometryNode* node, out_t* out) {
     internal::VisitNativeVertices(
         node, 0, node->size, [&](internal::GeoArrowVertex v) {
           R2Point projected = projection_.Project(v.ToPoint());
@@ -260,7 +261,7 @@ struct TessellateGeomExec {
   }
 
   void TessellateLinestring(const struct GeoArrowGeometryNode* node,
-                            GeoArrowGeometryOutputBuilder* out) {
+                            out_t* out) {
     if (node->size == 0) {
       return;
     }
@@ -319,10 +320,11 @@ struct TessellateGeomExec {
 };
 
 /// \brief Exec implementation for st_segmentize for geography
+template <typename Output>
 struct SegmentizeExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = DoubleInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type geom, arg1_t::c_type distance, out_t* out) {
     if (!std::isfinite(distance) || distance <= 0) {
@@ -344,8 +346,7 @@ struct SegmentizeExec {
     out->FeatureEnd();
   }
 
-  void SegmentizePoint(const struct GeoArrowGeometryNode* node,
-                       GeoArrowGeographyOutputBuilder* out) {
+  void SegmentizePoint(const struct GeoArrowGeometryNode* node, out_t* out) {
     internal::VisitNativeVertices(node, 0, node->size,
                                   [&](const internal::GeoArrowVertex& v) {
                                     out->WriteCoord(v, node->dimensions);
@@ -353,8 +354,7 @@ struct SegmentizeExec {
                                   });
   }
 
-  void SegmentizeLinestring(const struct GeoArrowGeometryNode* node,
-                            GeoArrowGeographyOutputBuilder* out,
+  void SegmentizeLinestring(const struct GeoArrowGeometryNode* node, out_t* out,
                             S1Angle max_segment_length) {
     if (node->size == 0) {
       return;
@@ -405,17 +405,38 @@ struct SegmentizeExec {
 };
 
 void TessellateToGeog(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<TessellateGeogExec>(out, "st_tessellategeog", false, false);
+  InitBinaryKernel<TessellateGeogExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_tessellategeog", false, false);
 }
 
 void TessellateToGeom(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<TessellateGeomExec>(out, "st_tessellategeom", false, false);
+  InitBinaryKernel<TessellateGeomExec<GeoArrowGeometryOutputBuilder>>(
+      out, "st_tessellategeom", false, false);
 }
 
 void Segmentize(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<SegmentizeExec>(out, "st_segmentize", false, false);
+  InitBinaryKernel<SegmentizeExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_segmentize", false, false);
 }
 
 }  // namespace sedona_udf
+
+std::unique_ptr<Operation> TessellateGeog() {
+  return std::make_unique<internal::GeographyDoubleOperation<
+      sedona_udf::TessellateGeogExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "tessellate_geog");
+}
+
+std::unique_ptr<Operation> TessellateGeom() {
+  return std::make_unique<internal::GeographyDoubleOperation<
+      sedona_udf::TessellateGeomExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "tessellate_geom");
+}
+
+std::unique_ptr<Operation> Segmentize() {
+  return std::make_unique<internal::GeographyDoubleOperation<
+      sedona_udf::SegmentizeExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "segmentize");
+}
 
 }  // namespace s2geography

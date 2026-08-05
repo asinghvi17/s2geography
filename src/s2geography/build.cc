@@ -22,6 +22,7 @@
 #include "s2geography/accessors.h"
 #include "s2geography/geography_interface.h"
 #include "s2geography/macros.h"
+#include "s2geography/operation_internal.h"
 #include "s2geography/sedona_udf/sedona_udf_internal.h"
 
 namespace s2geography {
@@ -644,9 +645,9 @@ struct OutputGeometry {
   ///
   /// This is the point at which the nesting of any output polygon rings are
   /// calculated.
-  void WriteTo(GeoArrowGeographyOutputBuilder* out,
-               uint8_t geometry_type_if_empty =
-                   GEOARROW_GEOMETRY_TYPE_GEOMETRYCOLLECTION) {
+  template <typename Out>
+  void WriteTo(Out* out, uint8_t geometry_type_if_empty =
+                             GEOARROW_GEOMETRY_TYPE_GEOMETRYCOLLECTION) {
     if (num_types() == 0) {
       out->AppendEmpty(geometry_type_if_empty);
       return;
@@ -671,7 +672,8 @@ struct OutputGeometry {
   }
 
  private:
-  void WritePointOutput(GeoArrowGeographyOutputBuilder* out) {
+  template <typename Out>
+  void WritePointOutput(Out* out) {
     if (points_.size() == 1) {
       out->GeomStart(GEOARROW_GEOMETRY_TYPE_POINT);
       out->WriteCoord(points_[0]);
@@ -687,7 +689,8 @@ struct OutputGeometry {
     }
   }
 
-  void WriteLinesOutput(GeoArrowGeographyOutputBuilder* out) {
+  template <typename Out>
+  void WriteLinesOutput(Out* out) {
     if (line_lengths_.size() == 1) {
       out->GeomStart(GEOARROW_GEOMETRY_TYPE_LINESTRING);
       for (int i = 0; i < line_lengths_[0]; ++i) {
@@ -708,7 +711,8 @@ struct OutputGeometry {
     }
   }
 
-  void WritePolygonOutput(GeoArrowGeographyOutputBuilder* out) {
+  template <typename Out>
+  void WritePolygonOutput(Out* out) {
     GroupRings();
 
     int order_id = 0;
@@ -1113,8 +1117,8 @@ struct RebuildExec {
     builder_.Init(builder_options_);
   }
 
-  void Exec(const GeoArrowGeography& value0,
-            GeoArrowGeographyOutputBuilder* out) {
+  template <typename Out>
+  void Exec(const GeoArrowGeography& value0, Out* out) {
     builder_.Reset();
     edge_tracker_.Clear();
     output_.Clear();
@@ -1163,10 +1167,11 @@ struct RebuildExec {
   OutputGeometry output_;
 };
 
+template <typename Output>
 struct ReducePrecisionExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = DoubleInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, double grid_size, out_t* out) {
     // If the grid size changed since the last iteration, we need to recreate
@@ -1196,10 +1201,11 @@ struct ReducePrecisionExec {
   double last_grid_size_{-100};
 };
 
+template <typename Output>
 struct SimplifyExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = DoubleInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, double tolerance, out_t* out) {
     // If the grid size changed since the last iteration, we need to recreate
@@ -1257,10 +1263,11 @@ void BuildOverlay(S2BooleanOperation::OpType op_type,
 
 }  // namespace
 
+template <typename Output>
 struct UnionOperationExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   UnionOperationExec() {
     options_.set_polygon_model(S2BooleanOperation::PolygonModel::CLOSED);
@@ -1327,10 +1334,11 @@ struct UnionOperationExec {
   OutputGeometry output_;
 };
 
+template <typename Output>
 struct IntersectionOperationExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   IntersectionOperationExec() {
     options_.set_polygon_model(S2BooleanOperation::PolygonModel::CLOSED);
@@ -1385,10 +1393,11 @@ struct IntersectionOperationExec {
   OutputGeometry output_;
 };
 
+template <typename Output>
 struct DifferenceOperationExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   DifferenceOperationExec() {
     options_.set_polygon_model(S2BooleanOperation::PolygonModel::CLOSED);
@@ -1446,10 +1455,11 @@ struct DifferenceOperationExec {
   OutputGeometry output_;
 };
 
+template <typename Output>
 struct SymDifferenceOperationExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   SymDifferenceOperationExec() {
     options_.set_polygon_model(S2BooleanOperation::PolygonModel::CLOSED);
@@ -1608,11 +1618,12 @@ BufferParams BufferParams::Parse(std::string_view params_str) {
   return params;
 }
 
+template <typename Output>
 struct BufferParamsExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = DoubleInputView;
   using arg2_t = StringInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, arg1_t::c_type distance,
             arg2_t::c_type params, out_t* out) {
@@ -1690,11 +1701,12 @@ struct BufferParamsExec {
   OutputGeometry output_;
 };
 
+template <typename Output>
 struct BufferQuadSegsExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = DoubleInputView;
   using arg2_t = IntInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, arg1_t::c_type distance,
             arg2_t::c_type n_quad_segs, out_t* out) {
@@ -1703,57 +1715,157 @@ struct BufferQuadSegsExec {
     buffer_params_.Exec(value, distance, params, out);
   }
 
-  BufferParamsExec buffer_params_;
+  BufferParamsExec<Output> buffer_params_;
 };
 
+template <typename Output>
 struct BufferExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = DoubleInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, arg1_t::c_type distance, out_t* out) {
     buffer_params_.Exec(value, distance, "", out);
   }
 
-  BufferParamsExec buffer_params_;
+  BufferParamsExec<Output> buffer_params_;
 };
 
 void DifferenceKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<DifferenceOperationExec>(out, "st_difference");
+  InitBinaryKernel<DifferenceOperationExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_difference");
 }
 
 void SymDifferenceKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<SymDifferenceOperationExec>(out, "st_symdifference");
+  InitBinaryKernel<SymDifferenceOperationExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_symdifference");
 }
 
 void IntersectionKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<IntersectionOperationExec>(out, "st_intersection");
+  InitBinaryKernel<IntersectionOperationExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_intersection");
 }
 
 void UnionKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<UnionOperationExec>(out, "st_union");
+  InitBinaryKernel<UnionOperationExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_union");
 }
 
 void ReducePrecisionKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<ReducePrecisionExec>(out, "st_reduceprecision");
+  InitBinaryKernel<ReducePrecisionExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_reduceprecision");
 }
 
 void SimplifyKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<SimplifyExec>(out, "st_simplify");
+  InitBinaryKernel<SimplifyExec<GeoArrowGeographyOutputBuilder>>(out,
+                                                                 "st_simplify");
 }
 
 void BufferKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<BufferExec>(out, "st_buffer");
+  InitBinaryKernel<BufferExec<GeoArrowGeographyOutputBuilder>>(out,
+                                                               "st_buffer");
 }
 
 void BufferQuadSegsKernel(struct SedonaCScalarKernel* out) {
-  InitTernaryKernel<BufferQuadSegsExec>(out, "st_buffer");
+  InitTernaryKernel<BufferQuadSegsExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_buffer");
 }
 
 void BufferParamsKernel(struct SedonaCScalarKernel* out) {
-  InitTernaryKernel<BufferParamsExec>(out, "st_buffer");
+  InitTernaryKernel<BufferParamsExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_buffer");
 }
 
 }  // namespace sedona_udf
+
+/// \brief Operation implementation for st_buffer
+///
+/// Unlike the other operations, this one is exposed with three arities: the
+/// buffer parameters default to the same values the binary kernel uses when
+/// they are not specified.
+class BufferOperation : public Operation {
+ public:
+  BufferOperation() : name_("buffer") {}
+
+  const std::string& name() const override { return name_; }
+
+  OutputType output_type() const override {
+    return Operation::OutputType::kGeography;
+  }
+
+  void ExecGeogDouble(const GeoArrowGeography& arg0,
+                      double distance_meters) override {
+    out_.Rewind();
+    defaults_.Exec(arg0, distance_meters, &out_);
+    has_result_ = !out_.is_null();
+  }
+
+  void ExecGeogDoubleInt(const GeoArrowGeography& arg0, double distance_meters,
+                         int64_t quadrant_segments) override {
+    out_.Rewind();
+    quad_segs_.Exec(arg0, distance_meters, quadrant_segments, &out_);
+    has_result_ = !out_.is_null();
+  }
+
+  void ExecGeogDoubleString(const GeoArrowGeography& arg0,
+                            double distance_meters,
+                            std::string_view params) override {
+    out_.Rewind();
+    params_.Exec(arg0, distance_meters, params, &out_);
+    has_result_ = !out_.is_null();
+  }
+
+  const struct GeoArrowGeometry* GetGeography() const override {
+    return out_.geometry();
+  }
+
+ private:
+  std::string name_;
+  sedona_udf::GeoArrowScalarOutputBuilder out_;
+  sedona_udf::BufferExec<sedona_udf::GeoArrowScalarOutputBuilder> defaults_;
+  sedona_udf::BufferQuadSegsExec<sedona_udf::GeoArrowScalarOutputBuilder>
+      quad_segs_;
+  sedona_udf::BufferParamsExec<sedona_udf::GeoArrowScalarOutputBuilder> params_;
+};
+
+std::unique_ptr<Operation> Intersection() {
+  return std::make_unique<
+      internal::BinaryGeographyOperation<sedona_udf::IntersectionOperationExec<
+          sedona_udf::GeoArrowScalarOutputBuilder>>>("intersection");
+}
+
+std::unique_ptr<Operation> Union() {
+  return std::make_unique<internal::BinaryGeographyOperation<
+      sedona_udf::UnionOperationExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "union");
+}
+
+std::unique_ptr<Operation> Difference() {
+  return std::make_unique<
+      internal::BinaryGeographyOperation<sedona_udf::DifferenceOperationExec<
+          sedona_udf::GeoArrowScalarOutputBuilder>>>("difference");
+}
+
+std::unique_ptr<Operation> SymDifference() {
+  return std::make_unique<
+      internal::BinaryGeographyOperation<sedona_udf::SymDifferenceOperationExec<
+          sedona_udf::GeoArrowScalarOutputBuilder>>>("sym_difference");
+}
+
+std::unique_ptr<Operation> Simplify() {
+  return std::make_unique<internal::GeographyDoubleOperation<
+      sedona_udf::SimplifyExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "simplify");
+}
+
+std::unique_ptr<Operation> Buffer() {
+  return std::make_unique<BufferOperation>();
+}
+
+std::unique_ptr<Operation> ReducePrecision() {
+  return std::make_unique<
+      internal::GeographyDoubleOperation<sedona_udf::ReducePrecisionExec<
+          sedona_udf::GeoArrowScalarOutputBuilder>>>("reduce_precision");
+}
 
 }  // namespace s2geography

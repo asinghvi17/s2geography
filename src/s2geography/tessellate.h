@@ -1,8 +1,15 @@
 #pragma once
 
+#include <memory>
+
+#include "s2geography/operation.h"
 #include "s2geography/sedona_udf/sedona_extension.h"
 
 namespace s2geography {
+
+std::unique_ptr<Operation> TessellateGeog();
+std::unique_ptr<Operation> TessellateGeom();
+std::unique_ptr<Operation> Segmentize();
 
 namespace sedona_udf {
 

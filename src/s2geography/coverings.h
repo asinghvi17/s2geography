@@ -4,8 +4,11 @@
 #include <s2/s2latlng_rect.h>
 #include <s2/s2region_coverer.h>
 
+#include <memory>
+
 #include "s2geography/geoarrow-geography.h"
 #include "s2geography/geography.h"
+#include "s2geography/operation.h"
 #include "s2geography/sedona_udf/sedona_extension.h"
 
 namespace s2geography {
@@ -39,6 +42,9 @@ void s2_covering_buffered(const ShapeIndexGeography& geog,
                           double distance_radians,
                           std::vector<S2CellId>* covering,
                           S2RegionCoverer& coverer);
+
+std::unique_ptr<Operation> CellIdFromPoint();
+std::unique_ptr<Operation> CoveringCellIds();
 
 namespace sedona_udf {
 

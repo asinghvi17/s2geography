@@ -5,10 +5,12 @@
 #include <s2/s2builderutil_s2polygon_layer.h>
 #include <s2/s2builderutil_s2polyline_vector_layer.h>
 
+#include <memory>
 #include <string_view>
 
 #include "s2geography/aggregator.h"
 #include "s2geography/geography.h"
+#include "s2geography/operation.h"
 #include "s2geography/sedona_udf/sedona_extension.h"
 
 namespace s2geography {
@@ -104,6 +106,14 @@ class S2UnionAggregator : public Aggregator<std::unique_ptr<Geography>> {
   Node root_;
   std::vector<std::unique_ptr<Node>> other_;
 };
+
+std::unique_ptr<Operation> Intersection();
+std::unique_ptr<Operation> Union();
+std::unique_ptr<Operation> Difference();
+std::unique_ptr<Operation> SymDifference();
+std::unique_ptr<Operation> Simplify();
+std::unique_ptr<Operation> Buffer();
+std::unique_ptr<Operation> ReducePrecision();
 
 namespace sedona_udf {
 

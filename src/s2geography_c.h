@@ -321,8 +321,132 @@ struct S2GeogOp;
 /// boolean
 #define S2GEOGRAPHY_OP_DISJOINT 6
 
+/// \brief Compute the area of a geography in square meters, returning a double
+#define S2GEOGRAPHY_OP_AREA 7
+
+/// \brief Compute the perimeter of the polygons in a geography in meters,
+/// returning a double
+#define S2GEOGRAPHY_OP_PERIMETER 8
+
+/// \brief Compute the length of the polylines in a geography in meters,
+/// returning a double
+#define S2GEOGRAPHY_OP_LENGTH 9
+
+/// \brief Compute the minimum distance between two geographies in meters,
+/// returning a double
+#define S2GEOGRAPHY_OP_DISTANCE 10
+
+/// \brief Compute the maximum distance between two geographies in meters,
+/// returning a double
+#define S2GEOGRAPHY_OP_MAX_DISTANCE 11
+
+/// \brief Compute the centroid of a geography, returning a geography
+#define S2GEOGRAPHY_OP_CENTROID 12
+
+/// \brief Compute the convex hull of a geography, returning a geography
+#define S2GEOGRAPHY_OP_CONVEX_HULL 13
+
+/// \brief Compute a point guaranteed to intersect a geography, returning a
+/// geography
+#define S2GEOGRAPHY_OP_POINT_ON_SURFACE 14
+
+/// \brief Compute the intersection of two geographies, returning a geography
+#define S2GEOGRAPHY_OP_INTERSECTION 15
+
+/// \brief Compute the union of two geographies, returning a geography
+#define S2GEOGRAPHY_OP_UNION 16
+
+/// \brief Compute the difference between two geographies, returning a
+/// geography
+#define S2GEOGRAPHY_OP_DIFFERENCE 17
+
+/// \brief Compute the symmetric difference between two geographies, returning
+/// a geography
+#define S2GEOGRAPHY_OP_SYM_DIFFERENCE 18
+
+/// \brief Compute the point on the first geography closest to the second,
+/// returning a geography
+#define S2GEOGRAPHY_OP_CLOSEST_POINT 19
+
+/// \brief Compute the line joining the closest points of two geographies,
+/// returning a geography
+#define S2GEOGRAPHY_OP_SHORTEST_LINE 20
+
+/// \brief Compute the line joining the farthest points of two geographies,
+/// returning a geography
+#define S2GEOGRAPHY_OP_LONGEST_LINE 21
+
+/// \brief Simplify a geography using a tolerance in meters, returning a
+/// geography
+#define S2GEOGRAPHY_OP_SIMPLIFY 22
+
+/// \brief Buffer a geography by a distance in meters, returning a geography
+///
+/// In addition to the distance, this operation optionally accepts the number
+/// of segments used to approximate a quarter circle or a PostGIS-style
+/// parameter string (e.g., "endcap=round quad_segs=4").
+#define S2GEOGRAPHY_OP_BUFFER 23
+
+/// \brief Snap the vertices of a geography to a grid whose size is given in
+/// degrees, returning a geography
+#define S2GEOGRAPHY_OP_REDUCE_PRECISION 24
+
+/// \brief Add vertices to a geography such that no edge is longer than a
+/// distance in meters, returning a geography
+#define S2GEOGRAPHY_OP_SEGMENTIZE 25
+
+/// \brief Convert a planar geometry into a geography by adding vertices such
+/// that the two differ by less than a tolerance in meters, returning a
+/// geography
+///
+/// The input is interpreted as having planar (not spherical) edges. A S2Geog
+/// does not record which of the two it holds, so it is the caller's
+/// responsibility to pass a geography whose edges are planar.
+#define S2GEOGRAPHY_OP_TESSELLATE_GEOG 26
+
+/// \brief Convert a geography into a planar geometry by adding vertices such
+/// that the two differ by less than a tolerance in meters, returning a
+/// geography
+///
+/// The output has planar (not spherical) edges. A S2Geog does not record
+/// which of the two it holds, so passing this result to another operation
+/// will treat its edges as spherical.
+#define S2GEOGRAPHY_OP_TESSELLATE_GEOM 27
+
+/// \brief Compute the point a fraction of the way along a single linestring,
+/// returning a geography
+#define S2GEOGRAPHY_OP_LINE_INTERPOLATE_POINT 28
+
+/// \brief Compute the fraction of the way along a single linestring at which
+/// a point is closest to it, returning a double
+#define S2GEOGRAPHY_OP_LINE_LOCATE_POINT 29
+
+/// \brief Compute the cell ID containing a point geography, returning an
+/// integer
+#define S2GEOGRAPHY_OP_CELL_ID_FROM_POINT 30
+
+/// \brief Compute a cell covering of a geography, returning zero or more
+/// integers
+///
+/// In addition to the geography, this operation optionally accepts the
+/// minimum cell level, the maximum cell level, and the maximum number of
+/// cells in the covering.
+#define S2GEOGRAPHY_OP_COVERING_CELL_IDS 31
+
 /// \brief Returned by S2GeogOpOutputType when the output type is a bool
 #define S2GEOGRAPHY_OUTPUT_TYPE_BOOL 1
+
+/// \brief Returned by S2GeogOpOutputType when the output type is an integer
+#define S2GEOGRAPHY_OUTPUT_TYPE_INT 2
+
+/// \brief Returned by S2GeogOpOutputType when the output type is a double
+#define S2GEOGRAPHY_OUTPUT_TYPE_DOUBLE 3
+
+/// \brief Returned by S2GeogOpOutputType when the output type is WKB
+#define S2GEOGRAPHY_OUTPUT_TYPE_WKB 4
+
+/// \brief Returned by S2GeogOpOutputType when the output type is a geography
+#define S2GEOGRAPHY_OUTPUT_TYPE_GEOGRAPHY 5
 
 /// \brief Create a new operator object
 ///
@@ -339,13 +463,64 @@ const char* S2GeogOpName(const struct S2GeogOp* op);
 /// \pre op != NULL
 int S2GeogOpOutputType(const struct S2GeogOp* op);
 
+/// \brief Evaluate an operation with one geography as input
+///
+/// \pre op != NULL
+/// \pre arg0 != NULL
+S2GeogErrorCode S2GeogOpEvalGeog(struct S2GeogOp* op, const struct S2Geog* arg0,
+                                 struct S2GeogError* err);
+
+/// \brief Evaluate an operation with a geography and a double as input
+///
+/// \pre op != NULL
+/// \pre arg0 != NULL
+S2GeogErrorCode S2GeogOpEvalGeogDouble(struct S2GeogOp* op,
+                                       const struct S2Geog* arg0, double arg1,
+                                       struct S2GeogError* err);
+
+/// \brief Evaluate an operation with a geography, a double, and an integer as
+/// input
+///
+/// \pre op != NULL
+/// \pre arg0 != NULL
+S2GeogErrorCode S2GeogOpEvalGeogDoubleInt(struct S2GeogOp* op,
+                                          const struct S2Geog* arg0,
+                                          double arg1, int64_t arg2,
+                                          struct S2GeogError* err);
+
+/// \brief Evaluate an operation with a geography, a double, and a string as
+/// input
+///
+/// The string is not required to be null-terminated and is not retained by
+/// the operation after this call returns.
+///
+/// \pre op != NULL
+/// \pre arg0 != NULL
+/// \pre arg2 != NULL || arg2_size == 0
+S2GeogErrorCode S2GeogOpEvalGeogDoubleString(struct S2GeogOp* op,
+                                             const struct S2Geog* arg0,
+                                             double arg1, const char* arg2,
+                                             size_t arg2_size,
+                                             struct S2GeogError* err);
+
+/// \brief Evaluate an operation with a geography and three integers as input
+///
+/// \pre op != NULL
+/// \pre arg0 != NULL
+S2GeogErrorCode S2GeogOpEvalGeogIntIntInt(struct S2GeogOp* op,
+                                          const struct S2Geog* arg0,
+                                          int64_t arg1, int64_t arg2,
+                                          int64_t arg3,
+                                          struct S2GeogError* err);
+
 /// \brief Evaluate an operation with two geographies as input
 ///
 /// \pre op != NULL
 /// \pre arg0 != NULL
 /// \pre arg1 != NULL
-S2GeogErrorCode S2GeogOpEvalGeogGeog(struct S2GeogOp* op, const S2Geog* arg0,
-                                     const S2Geog* arg1,
+S2GeogErrorCode S2GeogOpEvalGeogGeog(struct S2GeogOp* op,
+                                     const struct S2Geog* arg0,
+                                     const struct S2Geog* arg1,
                                      struct S2GeogError* err);
 
 /// \brief Evaluate an operation with two geographies and a double as input
@@ -354,14 +529,63 @@ S2GeogErrorCode S2GeogOpEvalGeogGeog(struct S2GeogOp* op, const S2Geog* arg0,
 /// \pre arg0 != NULL
 /// \pre arg1 != NULL
 S2GeogErrorCode S2GeogOpEvalGeogGeogDouble(struct S2GeogOp* op,
-                                           const S2Geog* arg0,
-                                           const S2Geog* arg1, double arg2,
+                                           const struct S2Geog* arg0,
+                                           const struct S2Geog* arg1,
+                                           double arg2,
                                            struct S2GeogError* err);
+
+/// \brief Return 1 if the most recent evaluation produced a non-null output or
+/// 0 otherwise
+///
+/// Some operations return a null output for some non-null inputs (e.g.,
+/// S2GEOGRAPHY_OP_DISTANCE for an empty geography). The output returned by
+/// the getters below is not defined when this returns 0.
+///
+/// \pre op != NULL
+uint8_t S2GeogOpHasResult(struct S2GeogOp* op);
 
 /// \brief Get integer or boolean output for this operation
 ///
 /// \pre op != NULL
 int64_t S2GeogOpGetInt(struct S2GeogOp* op);
+
+/// \brief Get double output for this operation
+///
+/// \pre op != NULL
+double S2GeogOpGetDouble(struct S2GeogOp* op);
+
+/// \brief Get the number of integers generated by the most recent evaluation
+///
+/// This is used by operations that generate a variable number of integers
+/// for a single evaluation (e.g., S2GEOGRAPHY_OP_COVERING_CELL_IDS).
+///
+/// \pre op != NULL
+size_t S2GeogOpGetIntCount(struct S2GeogOp* op);
+
+/// \brief Copy integer output for this operation into a caller-allocated array
+///
+/// At most out_size values are copied and the number of values copied is
+/// returned. Use S2GeogOpGetIntCount() to size the output.
+///
+/// \pre op != NULL
+/// \pre out != NULL || out_size == 0
+size_t S2GeogOpGetInts(struct S2GeogOp* op, int64_t* out, size_t out_size);
+
+/// \brief Get geography output for this operation
+///
+/// The output S2Geog must have been created before this call with
+/// S2GeogCreate(). This S2Geog can and should be reused for multiple calls to
+/// this function (geographies have internal scratch space that can be
+/// reused). The output owns its coordinates and is not invalidated by the
+/// next evaluation of this operation.
+///
+/// This function may modify out in the case of error; however, out is left in
+/// a valid state and may be reused in another call.
+///
+/// \pre op != NULL
+/// \pre out != NULL
+S2GeogErrorCode S2GeogOpGetGeog(struct S2GeogOp* op, struct S2Geog* out,
+                                struct S2GeogError* err);
 
 /// \brief Destroy an op object
 ///

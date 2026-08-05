@@ -1,9 +1,11 @@
 
 #include "s2geography_c.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <string>
+#include <string_view>
 
 #include "absl/base/config.h"
 #include "geoarrow/geoarrow.h"
@@ -505,6 +507,81 @@ S2GeogErrorCode S2GeogOpCreate(struct S2GeogOp** op, int op_id) {
     case S2GEOGRAPHY_OP_DISJOINT:
       inner = s2geography::Disjoint();
       break;
+    case S2GEOGRAPHY_OP_AREA:
+      inner = s2geography::Area();
+      break;
+    case S2GEOGRAPHY_OP_PERIMETER:
+      inner = s2geography::Perimeter();
+      break;
+    case S2GEOGRAPHY_OP_LENGTH:
+      inner = s2geography::Length();
+      break;
+    case S2GEOGRAPHY_OP_DISTANCE:
+      inner = s2geography::Distance();
+      break;
+    case S2GEOGRAPHY_OP_MAX_DISTANCE:
+      inner = s2geography::MaxDistance();
+      break;
+    case S2GEOGRAPHY_OP_CENTROID:
+      inner = s2geography::Centroid();
+      break;
+    case S2GEOGRAPHY_OP_CONVEX_HULL:
+      inner = s2geography::ConvexHull();
+      break;
+    case S2GEOGRAPHY_OP_POINT_ON_SURFACE:
+      inner = s2geography::PointOnSurface();
+      break;
+    case S2GEOGRAPHY_OP_INTERSECTION:
+      inner = s2geography::Intersection();
+      break;
+    case S2GEOGRAPHY_OP_UNION:
+      inner = s2geography::Union();
+      break;
+    case S2GEOGRAPHY_OP_DIFFERENCE:
+      inner = s2geography::Difference();
+      break;
+    case S2GEOGRAPHY_OP_SYM_DIFFERENCE:
+      inner = s2geography::SymDifference();
+      break;
+    case S2GEOGRAPHY_OP_CLOSEST_POINT:
+      inner = s2geography::ClosestPoint();
+      break;
+    case S2GEOGRAPHY_OP_SHORTEST_LINE:
+      inner = s2geography::ShortestLine();
+      break;
+    case S2GEOGRAPHY_OP_LONGEST_LINE:
+      inner = s2geography::LongestLine();
+      break;
+    case S2GEOGRAPHY_OP_SIMPLIFY:
+      inner = s2geography::Simplify();
+      break;
+    case S2GEOGRAPHY_OP_BUFFER:
+      inner = s2geography::Buffer();
+      break;
+    case S2GEOGRAPHY_OP_REDUCE_PRECISION:
+      inner = s2geography::ReducePrecision();
+      break;
+    case S2GEOGRAPHY_OP_SEGMENTIZE:
+      inner = s2geography::Segmentize();
+      break;
+    case S2GEOGRAPHY_OP_TESSELLATE_GEOG:
+      inner = s2geography::TessellateGeog();
+      break;
+    case S2GEOGRAPHY_OP_TESSELLATE_GEOM:
+      inner = s2geography::TessellateGeom();
+      break;
+    case S2GEOGRAPHY_OP_LINE_INTERPOLATE_POINT:
+      inner = s2geography::LineInterpolatePoint();
+      break;
+    case S2GEOGRAPHY_OP_LINE_LOCATE_POINT:
+      inner = s2geography::LineLocatePoint();
+      break;
+    case S2GEOGRAPHY_OP_CELL_ID_FROM_POINT:
+      inner = s2geography::CellIdFromPoint();
+      break;
+    case S2GEOGRAPHY_OP_COVERING_CELL_IDS:
+      inner = s2geography::CoveringCellIds();
+      break;
     default:
       return ENOTSUP;
   }
@@ -526,13 +603,97 @@ int S2GeogOpOutputType(const struct S2GeogOp* op) {
   switch (op->op->output_type()) {
     case s2geography::Operation::OutputType::kBool:
       return S2GEOGRAPHY_OUTPUT_TYPE_BOOL;
+    case s2geography::Operation::OutputType::kInt:
+      return S2GEOGRAPHY_OUTPUT_TYPE_INT;
+    case s2geography::Operation::OutputType::kDouble:
+      return S2GEOGRAPHY_OUTPUT_TYPE_DOUBLE;
+    case s2geography::Operation::OutputType::kWkb:
+      return S2GEOGRAPHY_OUTPUT_TYPE_WKB;
+    case s2geography::Operation::OutputType::kGeography:
+      return S2GEOGRAPHY_OUTPUT_TYPE_GEOGRAPHY;
     default:
       return 0;
   }
 }
 
-S2GeogErrorCode S2GeogOpEvalGeogGeog(struct S2GeogOp* op, const S2Geog* arg0,
-                                     const S2Geog* arg1,
+S2GeogErrorCode S2GeogOpEvalGeog(struct S2GeogOp* op, const struct S2Geog* arg0,
+                                 struct S2GeogError* err) {
+  S2GEOGRAPHY_C_BEGIN(err);
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  S2GEOGRAPHY_DCHECK(arg0 != nullptr);
+
+  op->op->ExecGeog(arg0->geog);
+  return S2GEOGRAPHY_OK;
+  S2GEOGRAPHY_C_END(err);
+}
+
+S2GeogErrorCode S2GeogOpEvalGeogDouble(struct S2GeogOp* op,
+                                       const struct S2Geog* arg0, double arg1,
+                                       struct S2GeogError* err) {
+  S2GEOGRAPHY_C_BEGIN(err);
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  S2GEOGRAPHY_DCHECK(arg0 != nullptr);
+
+  op->op->ExecGeogDouble(arg0->geog, arg1);
+  return S2GEOGRAPHY_OK;
+  S2GEOGRAPHY_C_END(err);
+}
+
+S2GeogErrorCode S2GeogOpEvalGeogDoubleInt(struct S2GeogOp* op,
+                                          const struct S2Geog* arg0,
+                                          double arg1, int64_t arg2,
+                                          struct S2GeogError* err) {
+  S2GEOGRAPHY_C_BEGIN(err);
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  S2GEOGRAPHY_DCHECK(arg0 != nullptr);
+
+  op->op->ExecGeogDoubleInt(arg0->geog, arg1, arg2);
+  return S2GEOGRAPHY_OK;
+  S2GEOGRAPHY_C_END(err);
+}
+
+S2GeogErrorCode S2GeogOpEvalGeogDoubleString(struct S2GeogOp* op,
+                                             const struct S2Geog* arg0,
+                                             double arg1, const char* arg2,
+                                             size_t arg2_size,
+                                             struct S2GeogError* err) {
+  S2GEOGRAPHY_C_BEGIN(err);
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  S2GEOGRAPHY_DCHECK(arg0 != nullptr);
+  S2GEOGRAPHY_DCHECK(arg2 != nullptr || arg2_size == 0);
+
+  std::string_view arg2_view;
+  if (arg2 != nullptr) {
+    arg2_view = std::string_view(arg2, arg2_size);
+  }
+
+  op->op->ExecGeogDoubleString(arg0->geog, arg1, arg2_view);
+  return S2GEOGRAPHY_OK;
+  S2GEOGRAPHY_C_END(err);
+}
+
+S2GeogErrorCode S2GeogOpEvalGeogIntIntInt(struct S2GeogOp* op,
+                                          const struct S2Geog* arg0,
+                                          int64_t arg1, int64_t arg2,
+                                          int64_t arg3,
+                                          struct S2GeogError* err) {
+  S2GEOGRAPHY_C_BEGIN(err);
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  S2GEOGRAPHY_DCHECK(arg0 != nullptr);
+
+  op->op->ExecGeogIntIntInt(arg0->geog, arg1, arg2, arg3);
+  return S2GEOGRAPHY_OK;
+  S2GEOGRAPHY_C_END(err);
+}
+
+S2GeogErrorCode S2GeogOpEvalGeogGeog(struct S2GeogOp* op,
+                                     const struct S2Geog* arg0,
+                                     const struct S2Geog* arg1,
                                      struct S2GeogError* err) {
   S2GEOGRAPHY_C_BEGIN(err);
   S2GEOGRAPHY_DCHECK(op != nullptr);
@@ -546,8 +707,9 @@ S2GeogErrorCode S2GeogOpEvalGeogGeog(struct S2GeogOp* op, const S2Geog* arg0,
 }
 
 S2GeogErrorCode S2GeogOpEvalGeogGeogDouble(struct S2GeogOp* op,
-                                           const S2Geog* arg0,
-                                           const S2Geog* arg1, double arg2,
+                                           const struct S2Geog* arg0,
+                                           const struct S2Geog* arg1,
+                                           double arg2,
                                            struct S2GeogError* err) {
   S2GEOGRAPHY_C_BEGIN(err);
   S2GEOGRAPHY_DCHECK(op != nullptr);
@@ -560,10 +722,71 @@ S2GeogErrorCode S2GeogOpEvalGeogGeogDouble(struct S2GeogOp* op,
   S2GEOGRAPHY_C_END(err);
 }
 
+uint8_t S2GeogOpHasResult(struct S2GeogOp* op) {
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  return op->op->has_result() ? 1 : 0;
+}
+
 int64_t S2GeogOpGetInt(struct S2GeogOp* op) {
   S2GEOGRAPHY_DCHECK(op != nullptr);
   S2GEOGRAPHY_DCHECK(op->op != nullptr);
   return op->op->GetInt();
+}
+
+double S2GeogOpGetDouble(struct S2GeogOp* op) {
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  return op->op->GetDouble();
+}
+
+size_t S2GeogOpGetIntCount(struct S2GeogOp* op) {
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  return op->op->GetInts().size();
+}
+
+size_t S2GeogOpGetInts(struct S2GeogOp* op, int64_t* out, size_t out_size) {
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  S2GEOGRAPHY_DCHECK(out != nullptr || out_size == 0);
+
+  const std::vector<int64_t>& ints = op->op->GetInts();
+  size_t n_copied = std::min<size_t>(out_size, ints.size());
+  if (n_copied > 0) {
+    std::memcpy(out, ints.data(), n_copied * sizeof(int64_t));
+  }
+
+  return n_copied;
+}
+
+S2GeogErrorCode S2GeogOpGetGeog(struct S2GeogOp* op, struct S2Geog* out,
+                                struct S2GeogError* err) {
+  S2GEOGRAPHY_C_BEGIN(err);
+
+  S2GEOGRAPHY_DCHECK(op != nullptr);
+  S2GEOGRAPHY_DCHECK(op->op != nullptr);
+  S2GEOGRAPHY_DCHECK(out != nullptr);
+
+  const struct GeoArrowGeometry* geom = op->op->GetGeography();
+  if (geom == nullptr) {
+    S2GEOGRAPHY_SET_ERROR(err, "operation does not have a geography output");
+    return EINVAL;
+  }
+
+  // The operation's output is invalidated by its next evaluation, so the
+  // coordinates must be copied and not just referenced
+  GeoArrowErrorCode ec =
+      GeoArrowGeometryDeepCopy(GeoArrowGeometryAsView(geom), &out->geom);
+  if (ec != GEOARROW_OK) {
+    S2GEOGRAPHY_SET_ERROR(err, "error copying geometry");
+    return ec;
+  }
+
+  out->geog.Init(GeoArrowGeometryAsView(&out->geom));
+
+  return S2GEOGRAPHY_OK;
+  S2GEOGRAPHY_C_END(err);
 }
 
 void S2GeogOpDestroy(struct S2GeogOp* op) {

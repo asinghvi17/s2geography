@@ -13,6 +13,7 @@
 
 #include "s2geography/geography.h"
 #include "s2geography/operation.h"
+#include "s2geography/operation_internal.h"
 #include "s2geography/sedona_udf/sedona_udf_internal.h"
 
 namespace s2geography {
@@ -582,10 +583,11 @@ void DistanceLine(const GeoArrowGeography& value0,
   }
 }
 
+template <typename Output>
 struct S2ClosestPointExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value0, arg1_t::c_type value1, out_t* out) {
     // The output usually consists of a vertex derived from the first
@@ -617,10 +619,11 @@ struct S2ClosestPointExec {
   EdgePair edge_pair_;
 };
 
+template <typename Output>
 struct S2DistanceExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = DoubleOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value0, arg1_t::c_type value1, out_t* out) {
     DistanceLine<MinDistanceTraits>(value0, value1, &edge_pair_,
@@ -635,10 +638,11 @@ struct S2DistanceExec {
   EdgePair edge_pair_;
 };
 
+template <typename Output>
 struct S2MaxDistanceExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = DoubleOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value0, arg1_t::c_type value1, out_t* out) {
     DistanceLine<MaxDistanceTraits>(value0, value1, &edge_pair_,
@@ -653,10 +657,11 @@ struct S2MaxDistanceExec {
   EdgePair edge_pair_;
 };
 
+template <typename Output>
 struct S2ShortestLineExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value0, arg1_t::c_type value1, out_t* out) {
     // The output usually consists of one vertex from each side, so
@@ -705,10 +710,11 @@ struct S2ShortestLineExec {
   EdgePair edge_pair_;
 };
 
+template <typename Output>
 struct S2LongestLineExec {
   using arg0_t = GeoArrowGeographyInputView;
   using arg1_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value0, arg1_t::c_type value1, out_t* out) {
     out->SetDimensionsCommon(value0.dimensions(), value1.dimensions());
@@ -774,13 +780,14 @@ struct S2DistanceWithinExec {
 };
 
 void ClosestPointKernel(struct SedonaCScalarKernel* out) {
-  InitBinaryKernel<S2ClosestPointExec>(out, "st_closestpoint");
+  InitBinaryKernel<S2ClosestPointExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_closestpoint");
 }
 
 void DistanceKernel(struct SedonaCScalarKernel* out, bool prepare_arg0_scalar,
                     bool prepare_arg1_scalar) {
-  InitBinaryKernel<S2DistanceExec>(out, "st_distance", prepare_arg0_scalar,
-                                   prepare_arg1_scalar);
+  InitBinaryKernel<S2DistanceExec<DoubleOutputBuilder>>(
+      out, "st_distance", prepare_arg0_scalar, prepare_arg1_scalar);
 }
 
 void DistanceWithinKernel(struct SedonaCScalarKernel* out,
@@ -791,19 +798,19 @@ void DistanceWithinKernel(struct SedonaCScalarKernel* out,
 
 void MaxDistanceKernel(struct SedonaCScalarKernel* out,
                        bool prepare_arg0_scalar, bool prepare_arg1_scalar) {
-  InitBinaryKernel<S2MaxDistanceExec>(out, "st_maxdistance",
-                                      prepare_arg0_scalar, prepare_arg1_scalar);
+  InitBinaryKernel<S2MaxDistanceExec<DoubleOutputBuilder>>(
+      out, "st_maxdistance", prepare_arg0_scalar, prepare_arg1_scalar);
 }
 
 void LongestLineKernel(struct SedonaCScalarKernel* out,
                        bool prepare_arg0_scalar, bool prepare_arg1_scalar) {
-  InitBinaryKernel<S2LongestLineExec>(out, "st_longestline",
-                                      prepare_arg0_scalar, prepare_arg1_scalar);
+  InitBinaryKernel<S2LongestLineExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_longestline", prepare_arg0_scalar, prepare_arg1_scalar);
 }
 
 void ShortestLineKernel(struct SedonaCScalarKernel* out,
                         bool prepare_arg0_scalar, bool prepare_arg1_scalar) {
-  InitBinaryKernel<S2ShortestLineExec>(
+  InitBinaryKernel<S2ShortestLineExec<GeoArrowGeographyOutputBuilder>>(
       out, "st_shortestline", prepare_arg0_scalar, prepare_arg1_scalar);
 }
 
@@ -840,6 +847,35 @@ class DistanceWithinOperation : public Operation {
 
 std::unique_ptr<Operation> DistanceWithin() {
   return std::make_unique<DistanceWithinOperation>();
+}
+
+std::unique_ptr<Operation> Distance() {
+  return std::make_unique<internal::BinaryDoubleOperation<
+      sedona_udf::S2DistanceExec<internal::StashedDoubleOutput>>>("distance");
+}
+
+std::unique_ptr<Operation> MaxDistance() {
+  return std::make_unique<internal::BinaryDoubleOperation<
+      sedona_udf::S2MaxDistanceExec<internal::StashedDoubleOutput>>>(
+      "max_distance");
+}
+
+std::unique_ptr<Operation> ClosestPoint() {
+  return std::make_unique<internal::BinaryGeographyOperation<
+      sedona_udf::S2ClosestPointExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "closest_point");
+}
+
+std::unique_ptr<Operation> ShortestLine() {
+  return std::make_unique<internal::BinaryGeographyOperation<
+      sedona_udf::S2ShortestLineExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "shortest_line");
+}
+
+std::unique_ptr<Operation> LongestLine() {
+  return std::make_unique<internal::BinaryGeographyOperation<
+      sedona_udf::S2LongestLineExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "longest_line");
 }
 
 }  // namespace s2geography

@@ -1,13 +1,19 @@
 
 #pragma once
 
+#include <memory>
+
 #include "s2geography/geography_interface.h"
+#include "s2geography/operation.h"
 #include "s2geography/sedona_udf/sedona_extension.h"
 
 namespace s2geography {
 
 double s2_project_normalized(const Geography& geog1, const Geography& geog2);
 S2Point s2_interpolate_normalized(const Geography& geog, double distance_norm);
+
+std::unique_ptr<Operation> LineInterpolatePoint();
+std::unique_ptr<Operation> LineLocatePoint();
 
 namespace sedona_udf {
 

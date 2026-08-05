@@ -7,6 +7,7 @@
 #include "s2geography/accessors.h"
 #include "s2geography/build.h"
 #include "s2geography/geography_interface.h"
+#include "s2geography/operation_internal.h"
 #include "s2geography/sedona_udf/sedona_udf_internal.h"
 
 namespace s2geography {
@@ -318,9 +319,10 @@ std::optional<internal::GeoArrowVertex> CentroidVertex(
 }
 }  // namespace
 
+template <typename Output>
 struct S2CentroidExec {
   using arg0_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, out_t* out) {
     // Output dimensions == input dimensions
@@ -336,9 +338,10 @@ struct S2CentroidExec {
   std::vector<S2Point> scratch_;
 };
 
+template <typename Output>
 struct S2ConvexHullExec {
   using arg0_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, out_t* out) {
     if (value.is_empty()) {
@@ -454,9 +457,10 @@ struct S2ConvexHullExec {
   std::vector<S2Point> scratch_;
 };
 
+template <typename Output>
 struct S2PointOnSurfaceExec {
   using arg0_t = GeoArrowGeographyInputView;
-  using out_t = GeoArrowGeographyOutputBuilder;
+  using out_t = Output;
 
   void Exec(arg0_t::c_type value, out_t* out) {
     // In general, we can propagate output dimensions
@@ -529,17 +533,38 @@ struct S2PointOnSurfaceExec {
 };
 
 void CentroidKernel(struct SedonaCScalarKernel* out) {
-  InitUnaryKernel<S2CentroidExec>(out, "st_centroid");
+  InitUnaryKernel<S2CentroidExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_centroid");
 }
 
 void ConvexHullKernel(struct SedonaCScalarKernel* out) {
-  InitUnaryKernel<S2ConvexHullExec>(out, "st_convexhull");
+  InitUnaryKernel<S2ConvexHullExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_convexhull");
 }
 
 void PointOnSurfaceKernel(struct SedonaCScalarKernel* out) {
-  InitUnaryKernel<S2PointOnSurfaceExec>(out, "st_pointonsurface");
+  InitUnaryKernel<S2PointOnSurfaceExec<GeoArrowGeographyOutputBuilder>>(
+      out, "st_pointonsurface");
 }
 
 }  // namespace sedona_udf
+
+std::unique_ptr<Operation> Centroid() {
+  return std::make_unique<internal::UnaryGeographyOperation<
+      sedona_udf::S2CentroidExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "centroid");
+}
+
+std::unique_ptr<Operation> ConvexHull() {
+  return std::make_unique<internal::UnaryGeographyOperation<
+      sedona_udf::S2ConvexHullExec<sedona_udf::GeoArrowScalarOutputBuilder>>>(
+      "convex_hull");
+}
+
+std::unique_ptr<Operation> PointOnSurface() {
+  return std::make_unique<
+      internal::UnaryGeographyOperation<sedona_udf::S2PointOnSurfaceExec<
+          sedona_udf::GeoArrowScalarOutputBuilder>>>("point_on_surface");
+}
 
 }  // namespace s2geography
